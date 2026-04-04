@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chat Connect Pro</title>
+    <title>Chat Connect Pro | Secure</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
@@ -24,7 +24,7 @@
         .sidebar { width: 320px; background: white; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; z-index: 10; transition: 0.3s; }
         .header { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
         
-        /* Arkadaş Listesi & Rozet */
+        /* Arkadaş Listesi */
         .friend-item { padding: 15px 20px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: 0.2s; }
         .friend-item:hover { background: #f1f5f9; }
         .friend-info { display: flex; align-items: center; gap: 12px; }
@@ -44,14 +44,14 @@
         .reply-box { background: rgba(0,0,0,0.05); border-left: 3px solid var(--accent); padding: 4px 8px; margin-bottom: 5px; font-size: 12px; border-radius: 4px; color: #666; }
         .sent .reply-box { color: #ccc; background: rgba(255,255,255,0.1); }
 
-        /* Input Alanı & Yanıt Önizleme */
+        /* Input Alanı */
         .input-container { background: white; border-top: 1px solid #cbd5e1; }
         #reply-preview { background: #f1f5f9; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--accent); }
         .input-box { padding: 12px; display: flex; align-items: center; gap: 10px; }
         .input-box input { flex: 1; padding: 12px 18px; border-radius: 25px; border: 1px solid #e2e8f0; outline: none; background: #f8fafc; }
 
-        /* Sağ Tık / İşlem Menüsü */
-        .msg-menu { position: fixed; background: white; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 8px; padding: 5px 0; z-index: 1000; font-size: 14px; }
+        /* İşlem Menüsü */
+        .msg-menu { position: fixed; background: white; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 8px; padding: 5px 0; z-index: 1000; font-size: 14px; min-width: 120px; }
         .msg-menu div { padding: 8px 20px; cursor: pointer; }
         .msg-menu div:hover { background: #f1f5f9; }
 
@@ -78,7 +78,7 @@
             <button onclick="logout()" style="font-size:11px; background:rgba(255,255,255,0.2); border:none; color:white; padding:5px; border-radius:4px;">Çıkış</button>
         </div>
         <div style="padding:10px; display:flex; gap:5px;">
-            <input type="text" id="target-email" placeholder="E-posta ekle" style="margin:0; padding:8px;">
+            <input type="text" id="target-email" placeholder="E-posta ekle" style="margin:0; padding:8px; flex:1">
             <button onclick="sendFriendRequest()" style="background:var(--accent); color:white; border:none; border-radius:5px; padding:0 10px;">+</button>
         </div>
         <div id="friends-list" style="overflow-y:auto; flex:1"></div>
@@ -86,7 +86,7 @@
 
     <div class="chat-area">
         <div class="header" style="background:white; color:var(--primary); border-bottom:1px solid #ddd;">
-            <button onclick="closeChat()" id="back-btn" style="display:none; background:none; border:none; font-size:18px;">⬅</button>
+            <button onclick="closeChat()" id="back-btn" style="background:none; border:none; font-size:18px;">⬅</button>
             <span id="current-chat-name">Sohbet Seçin</span>
         </div>
         
@@ -107,8 +107,8 @@
 
 <div id="context-menu" class="msg-menu hidden">
     <div onclick="initReply()">Yanıtla</div>
-    <div onclick="initEdit()">Düzenle</div>
-    <div onclick="deleteMessage()" style="color:red">Sil</div>
+    <div id="edit-btn" onclick="initEdit()">Düzenle</div>
+    <div id="delete-btn" onclick="deleteMessage()" style="color:red">Sil</div>
 </div>
 
 <script>
@@ -125,12 +125,13 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
+    const ADMIN_EMAIL = "akif97736@gmail.com"; // SÜPER YETKİLİ
+
     let currentChatUser = null;
     let selectedMsgId = null;
     let isEditing = false;
     let replyData = null;
 
-    // --- OTURUM & ARKADAŞLAR ---
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -143,80 +144,15 @@
         }
     });
 
-    function loadFriends() {
-        db.ref('friends/' + btoa(auth.currentUser.email)).on('value', snap => {
-            const list = document.getElementById('friends-list'); list.innerHTML = "";
-            snap.forEach(c => { 
-                const mail = atob(c.key);
-                const chatId = [btoa(auth.currentUser.email), btoa(mail)].sort().join("_");
-                
-                // Okunmamış Mesaj Sayısını Bul
-                db.ref('chats/' + chatId).orderByChild('isRead').equalTo(false).on('value', unreadSnap => {
-                    let count = 0;
-                    unreadSnap.forEach(m => { if(m.val().sender !== auth.currentUser.email) count++; });
-                    
-                    const existingItem = document.getElementById('friend-' + btoa(mail));
-                    if (existingItem) existingItem.remove();
-
-                    const badge = count > 0 ? `<span class="unread-badge">${count}</span>` : "";
-                    list.innerHTML += `
-                        <div class="friend-item" id="friend-${btoa(mail)}" onclick="openChat('${mail}')">
-                            <div class="friend-info">
-                                <div style="width:35px; height:35px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center;">${mail[0].toUpperCase()}</div>
-                                <span>${mail}</span>
-                            </div>
-                            ${badge}
-                        </div>`;
-                });
-            });
-        });
-    }
-
-    function openChat(mail) {
-        currentChatUser = mail;
-        document.getElementById('current-chat-name').innerText = mail;
-        if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('closed');
-        
-        // Mesajları Okundu Yap
-        const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
-        db.ref('chats/' + chatId).once('value', snap => {
-            snap.forEach(m => { if(m.val().sender !== auth.currentUser.email) db.ref('chats/' + chatId + '/' + m.key).update({isRead: true}); });
-        });
-        
-        loadMessages();
-    }
-
-    // --- MESAJ İŞLEMLERİ ---
-    function sendMessage() {
-        const text = document.getElementById('m-text').value;
-        if(!currentChatUser || !text.trim()) return;
-        const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
-
-        if(isEditing) {
-            db.ref('chats/' + chatId + '/' + selectedMsgId).update({ text: text, isEdited: true });
-            isEditing = false;
-        } else {
-            const msgData = {
-                sender: auth.currentUser.email,
-                text: text,
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                isRead: false
-            };
-            if(replyData) msgData.replyTo = replyData;
-            db.ref('chats/' + chatId).push(msgData);
-        }
-        
-        document.getElementById('m-text').value = "";
-        cancelReply();
-    }
-
+    // --- MESAJLARI YÜKLE VE YETKİLERİ KONTROL ET ---
     function loadMessages() {
         const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
         db.ref('chats/' + chatId).on('value', snap => {
             const list = document.getElementById('msg-list'); list.innerHTML = "";
             snap.forEach(child => {
                 const m = child.val();
-                const type = m.sender === auth.currentUser.email ? 'sent' : 'received';
+                const myEmail = auth.currentUser.email;
+                const type = m.sender === myEmail ? 'sent' : 'received';
                 const replyHtml = m.replyTo ? `<div class="reply-box"><b>${m.replyTo.sender}:</b> ${m.replyTo.text}</div>` : "";
                 const editedLabel = m.isEdited ? " (düzenlendi)" : "";
 
@@ -224,28 +160,53 @@
                 msgDiv.className = `msg ${type}`;
                 msgDiv.innerHTML = `${replyHtml} ${m.text} <span class="msg-time">${m.time}${editedLabel}</span>`;
                 
-                // Sağ Tık / Uzun Basma Menüsü
+                // Menü Açma Mantığı (YETKİ KONTROLÜ BURADA)
                 msgDiv.oncontextmenu = (e) => {
                     e.preventDefault();
-                    showMenu(e, child.key, m);
+                    selectedMsgId = child.key;
+                    window.tempData = m;
+                    
+                    const menu = document.getElementById('context-menu');
+                    const editBtn = document.getElementById('edit-btn');
+                    const deleteBtn = document.getElementById('delete-btn');
+
+                    // Yetki Ayarı: Kendi mesajınsa VEYA Admin isen
+                    if (m.sender === myEmail || myEmail === ADMIN_EMAIL) {
+                        editBtn.classList.remove('hidden');
+                        deleteBtn.classList.remove('hidden');
+                    } else {
+                        // Karşı tarafın mesajı ve sen admin değilsin: Sadece Yanıtla kalsın
+                        editBtn.classList.add('hidden');
+                        deleteBtn.classList.add('hidden');
+                    }
+
+                    menu.style.top = e.pageY + "px";
+                    menu.style.left = e.pageX + "px";
+                    menu.classList.remove('hidden');
                 };
-                // Çift Tıkla Yanıtla
-                msgDiv.ondblclick = () => { selectedMsgId = child.key; initReply(m); };
-                
+
+                msgDiv.ondblclick = () => { initReply(m); };
                 list.appendChild(msgDiv);
             });
             list.scrollTop = list.scrollHeight;
         });
     }
 
-    // Menü Fonksiyonları
-    function showMenu(e, id, data) {
-        selectedMsgId = id;
-        const menu = document.getElementById('context-menu');
-        menu.style.top = e.pageY + "px";
-        menu.style.left = e.pageX + "px";
-        menu.classList.remove('hidden');
-        window.tempData = data;
+    // --- DİĞER FONKSİYONLAR (AYNI KALDI) ---
+    function sendMessage() {
+        const text = document.getElementById('m-text').value;
+        if(!currentChatUser || !text.trim()) return;
+        const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
+        if(isEditing) {
+            db.ref('chats/' + chatId + '/' + selectedMsgId).update({ text: text, isEdited: true });
+            isEditing = false;
+        } else {
+            const msgData = { sender: auth.currentUser.email, text: text, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), isRead: false };
+            if(replyData) msgData.replyTo = replyData;
+            db.ref('chats/' + chatId).push(msgData);
+        }
+        document.getElementById('m-text').value = "";
+        cancelReply();
     }
 
     function deleteMessage() {
@@ -254,37 +215,36 @@
         hideMenu();
     }
 
-    function initEdit() {
-        isEditing = true;
-        document.getElementById('m-text').value = window.tempData.text;
-        document.getElementById('m-text').focus();
-        hideMenu();
-    }
-
-    function initReply(data = window.tempData) {
-        replyData = { sender: data.sender, text: data.text };
-        document.getElementById('reply-text').innerText = data.text;
-        document.getElementById('reply-preview').classList.remove('hidden');
-        document.getElementById('m-text').focus();
-        hideMenu();
-    }
-
-    function cancelReply() {
-        replyData = null;
-        document.getElementById('reply-preview').classList.add('hidden');
-    }
-
+    function initEdit() { isEditing = true; document.getElementById('m-text').value = window.tempData.text; document.getElementById('m-text').focus(); hideMenu(); }
+    function initReply(data = window.tempData) { replyData = { sender: data.sender, text: data.text }; document.getElementById('reply-text').innerText = data.text; document.getElementById('reply-preview').classList.remove('hidden'); document.getElementById('m-text').focus(); hideMenu(); }
+    function cancelReply() { replyData = null; document.getElementById('reply-preview').classList.add('hidden'); }
     function hideMenu() { document.getElementById('context-menu').classList.add('hidden'); }
     window.onclick = hideMenu;
 
-    // Diğer Fonksiyonlar
     function login() { auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('pass').value); }
     function logout() { auth.signOut(); }
     function closeChat() { document.getElementById('sidebar').classList.remove('closed'); }
-    function sendFriendRequest() {
-        const target = document.getElementById('target-email').value;
-        db.ref('requests/' + btoa(target) + '/' + btoa(auth.currentUser.email)).set({ from: auth.currentUser.email });
-        alert("İstek gönderildi.");
+    function sendFriendRequest() { const target = document.getElementById('target-email').value; db.ref('requests/' + btoa(target) + '/' + btoa(auth.currentUser.email)).set({ from: auth.currentUser.email }); alert("İstek atıldı."); }
+    function loadFriends() {
+        db.ref('friends/' + btoa(auth.currentUser.email)).on('value', snap => {
+            const list = document.getElementById('friends-list'); list.innerHTML = "";
+            snap.forEach(c => { 
+                const mail = atob(c.key);
+                const chatId = [btoa(auth.currentUser.email), btoa(mail)].sort().join("_");
+                db.ref('chats/' + chatId).orderByChild('isRead').equalTo(false).on('value', unreadSnap => {
+                    let count = 0; unreadSnap.forEach(m => { if(m.val().sender !== auth.currentUser.email) count++; });
+                    const badge = count > 0 ? `<span class="unread-badge">${count}</span>` : "";
+                    list.innerHTML += `<div class="friend-item" onclick="openChat('${mail}')"><div class="friend-info"><div style="width:35px; height:35px; background:var(--primary); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center;">${mail[0].toUpperCase()}</div><span>${mail}</span></div>${badge}</div>`;
+                });
+            });
+        });
+    }
+    function openChat(mail) {
+        currentChatUser = mail; document.getElementById('current-chat-name').innerText = mail;
+        if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('closed');
+        const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
+        db.ref('chats/' + chatId).once('value', snap => { snap.forEach(m => { if(m.val().sender !== auth.currentUser.email) db.ref('chats/' + chatId + '/' + m.key).update({isRead: true}); }); });
+        loadMessages();
     }
 </script>
 </body>
