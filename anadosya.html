@@ -193,21 +193,16 @@
 
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('closed'); }
 
-    // --- ENGELLEME & ENGEL KALDIRMA SİSTEMİ ---
+    // --- ENGELLEME SİSTEMİ ---
     function handleBlockToggle() {
         if(!currentChatUser) return;
         if(amIBlockingThisUser) {
-            unblockUser(currentChatUser);
+            db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(currentChatUser)).remove();
         } else {
             if(confirm(currentChatUser + " kişisini engellemek istiyor musunuz?")) {
                 db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(currentChatUser)).set(true);
             }
         }
-    }
-
-    function unblockUser(email) {
-        db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(email)).remove();
-        alert(email + " engeli kaldırıldı.");
     }
 
     function loadBlockedList() {
@@ -226,20 +221,18 @@
         });
     }
 
+    function unblockUser(email) {
+        db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(email)).remove();
+    }
+
     function checkBlockStatus() {
         const btn = document.getElementById('block-btn');
         if(!currentChatUser) { btn.classList.add('hidden'); return; }
-        
         btn.classList.remove('hidden');
         db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(currentChatUser)).on('value', snap => {
             amIBlockingThisUser = snap.exists();
-            if(amIBlockingThisUser) {
-                btn.innerText = "Engeli Kaldır";
-                btn.style.background = "var(--success)";
-            } else {
-                btn.innerText = "Engelle";
-                btn.style.background = "var(--danger)";
-            }
+            btn.innerText = amIBlockingThisUser ? "Engeli Kaldır" : "Engelle";
+            btn.style.background = amIBlockingThisUser ? "var(--success)" : "var(--danger)";
         });
     }
 
@@ -247,10 +240,7 @@
     function sendRequest() {
         const target = document.getElementById('target-email').value;
         if(!target || target === auth.currentUser.email) return;
-        db.ref('requests/' + btoa(target) + '/' + btoa(auth.currentUser.email)).set({
-            from: auth.currentUser.email,
-            time: Date.now()
-        });
+        db.ref('requests/' + btoa(target) + '/' + btoa(auth.currentUser.email)).set({ from: auth.currentUser.email, time: Date.now() });
         alert("İstek gönderildi!");
         document.getElementById('target-email').value = "";
     }
@@ -261,35 +251,32 @@
             list.innerHTML = "";
             snap.forEach(child => {
                 const req = child.val();
-                list.innerHTML += `
-                    <div class="list-item">
-                        <span>${req.from}</span>
-                        <div class="request-actions">
-                            <button onclick="acceptRequest('${req.from}')" style="background:green; color:white;">✅</button>
-                            <button onclick="rejectRequest('${req.from}')" style="background:red; color:white;">❌</button>
-                        </div>
-                    </div>`;
+                list.innerHTML += `<div class="list-item"><span>${req.from}</span><div class="request-actions"><button onclick="acceptRequest('${req.from}')" style="background:green; color:white;">✅</button><button onclick="rejectRequest('${req.from}')" style="background:red; color:white;">❌</button></div></div>`;
             });
         });
     }
 
     function acceptRequest(email) {
-        const myMail = btoa(auth.currentUser.email);
-        const targetMail = btoa(email);
+        const myMail = btoa(auth.currentUser.email), targetMail = btoa(email);
         db.ref('friends/' + myMail + '/' + targetMail).set(true);
         db.ref('friends/' + targetMail + '/' + myMail).set(true);
         db.ref('requests/' + myMail + '/' + targetMail).remove();
     }
 
-    function rejectRequest(email) {
-        db.ref('requests/' + btoa(auth.currentUser.email) + '/' + btoa(email)).remove();
+    function rejectRequest(email) { db.ref('requests/' + btoa(auth.currentUser.email) + '/' + btoa(email)).remove(); }
+
+    // --- MESAJ SİLME FONKSİYONU ---
+    function deleteMessage() {
+        if(!selectedMsgId || !currentChatUser) return;
+        if(confirm("Bu mesajı silmek istiyor musunuz?")) {
+            const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
+            db.ref('chats/' + chatId + '/' + selectedMsgId).remove();
+            document.getElementById('context-menu').classList.add('hidden');
+        }
     }
 
     // --- MESAJLAŞMA ---
-    function addEmoji(emoji) {
-        document.getElementById('m-text').value += emoji;
-        document.getElementById('m-text').focus();
-    }
+    function addEmoji(emoji) { document.getElementById('m-text').value += emoji; document.getElementById('m-text').focus(); }
 
     function loadFriends() {
         db.ref('friends/' + btoa(auth.currentUser.email)).on('value', snap => {
@@ -297,13 +284,7 @@
             list.innerHTML = "";
             snap.forEach(c => {
                 const mail = atob(c.key);
-                list.innerHTML += `
-                    <div class="list-item" onclick="openChat('${mail}')">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div class="avatar">${mail[0].toUpperCase()}</div>
-                            <span>${mail}</span>
-                        </div>
-                    </div>`;
+                list.innerHTML += `<div class="list-item" onclick="openChat('${mail}')"><div style="display:flex; align-items:center; gap:10px;"><div class="avatar">${mail[0].toUpperCase()}</div><span>${mail}</span></div></div>`;
             });
         });
     }
@@ -319,26 +300,12 @@
     function sendMessage() {
         const text = document.getElementById('m-text').value;
         if(!currentChatUser || !text.trim()) return;
-
-        // Engel Kontrolü (İki taraf için de)
-        db.ref('blocks/' + btoa(currentChatUser) + '/' + btoa(auth.currentUser.email)).once('value', b1 => {
-            db.ref('blocks/' + btoa(auth.currentUser.email) + '/' + btoa(currentChatUser)).once('value', b2 => {
-                if(b1.exists() || b2.exists()) {
-                    alert("Mesaj gönderilemedi. Engel durumunu kontrol edin.");
-                    return;
-                }
-                const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
-                const msgData = {
-                    sender: auth.currentUser.email,
-                    text: text,
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-                };
-                if(replyData) msgData.replyTo = replyData;
-                db.ref('chats/' + chatId).push(msgData);
-                document.getElementById('m-text').value = "";
-                cancelReply();
-            });
-        });
+        const chatId = [btoa(auth.currentUser.email), btoa(currentChatUser)].sort().join("_");
+        const msgData = { sender: auth.currentUser.email, text: text, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
+        if(replyData) msgData.replyTo = replyData;
+        db.ref('chats/' + chatId).push(msgData);
+        document.getElementById('m-text').value = "";
+        cancelReply();
     }
 
     function loadMessages() {
@@ -347,8 +314,7 @@
             const list = document.getElementById('msg-list');
             list.innerHTML = "";
             snap.forEach(child => {
-                const m = child.val();
-                const type = m.sender === auth.currentUser.email ? 'sent' : 'received';
+                const m = child.val(), type = m.sender === auth.currentUser.email ? 'sent' : 'received';
                 const div = document.createElement('div');
                 div.className = `msg ${type}`;
                 div.innerHTML = (m.replyTo ? `<div style="background:rgba(0,0,0,0.1); padding:5px; border-radius:5px; font-size:11px; margin-bottom:5px;"><b>${m.replyTo.sender}:</b> ${m.replyTo.text}</div>` : "") + m.text;
@@ -358,6 +324,16 @@
                     selectedMsgId = child.key;
                     window.tempData = m;
                     const menu = document.getElementById('context-menu');
+                    
+                    // SADECE KENDİ MESAJI İSE SİL/DÜZENLE GÖSTER
+                    if(m.sender === auth.currentUser.email) {
+                        document.getElementById('delete-opt').classList.remove('hidden');
+                        document.getElementById('edit-opt').classList.remove('hidden');
+                    } else {
+                        document.getElementById('delete-opt').classList.add('hidden');
+                        document.getElementById('edit-opt').classList.add('hidden');
+                    }
+
                     menu.style.top = e.pageY + "px";
                     menu.style.left = e.pageX + "px";
                     menu.classList.remove('hidden');
@@ -369,8 +345,7 @@
     }
 
     function register() {
-        const email = document.getElementById('reg-email').value;
-        const pass = document.getElementById('reg-pass').value;
+        const email = document.getElementById('reg-email').value, pass = document.getElementById('reg-pass').value;
         auth.createUserWithEmailAndPassword(email, pass).then(() => alert("Başarılı!")).catch(e => alert(e.message));
     }
     function login() { auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('pass').value).catch(e => alert(e.message)); }
