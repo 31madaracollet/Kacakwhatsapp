@@ -3,45 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kacakwhatsappbeyin 💬</title>
+    <title>Kacakwhatsappbeyin 💬 | TR</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
     <style>
-        /* WhatsApp Stili CSS */
-        :root { --wa-green: #075e54; --wa-light: #25d366; --bg: #e5ddd5; }
-        body { font-family: sans-serif; margin: 0; background: #dadbd3; }
+        /* TÜRK YAPIMI KIRMIZI TEMA CSS */
+        :root { 
+            --main-red: #c8102e; /* Ay Yıldız Kırmızısı */
+            --dark-red: #8b0000; 
+            --bg-gray: #f0f2f5;
+            --white: #ffffff;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: var(--bg-gray); overflow: hidden; }
         .hidden { display: none !important; }
+
+        /* Giriş Ekranı Süslendi */
+        #auth-screen { 
+            display: flex; justify-content: center; align-items: center; height: 100vh; 
+            background: linear-gradient(135deg, var(--main-red) 0%, #000 100%); 
+        }
+        .box { background: white; padding: 40px; border-radius: 20px; width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
+        .box h2 { color: var(--main-red); margin-bottom: 20px; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
         
-        /* Giriş Ekranı */
-        #auth-screen { display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; }
-        .box { background: white; padding: 30px; border-radius: 10px; width: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: var(--wa-light); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #eee; border-radius: 8px; box-sizing: border-box; transition: 0.3s; }
+        input:focus { border-color: var(--main-red); outline: none; }
         
+        button { 
+            width: 100%; padding: 12px; background: var(--main-red); color: white; border: none; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-top: 10px;
+        }
+        button:hover { background: var(--dark-red); transform: translateY(-2px); }
+
         /* Ana Uygulama */
-        #app-screen { display: flex; height: 100vh; background: white; }
-        .sidebar { width: 350px; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
-        .header { background: #ededed; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; }
-        .messages { flex: 1; padding: 20px; overflow-y: auto; }
-        .input-box { background: #f0f2f5; padding: 15px; display: flex; }
-        .msg { padding: 8px 12px; margin: 5px; border-radius: 10px; max-width: 70%; word-wrap: break-word; }
-        .sent { background: #dcf8c6; align-self: flex-end; margin-left: auto; }
-        .received { background: white; align-self: flex-start; }
+        #app-screen { display: flex; height: 100vh; width: 100vw; position: relative; }
+
+        /* Sidebar - Mobil Uyumlu */
+        .sidebar { 
+            width: 350px; border-right: 1px solid #ddd; display: flex; flex-direction: column; 
+            background: var(--white); z-index: 10; transition: 0.3s;
+        }
+
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #e5e5e5; position: relative; }
+
+        /* Headerlar Kırmızıya Döndü */
+        .header { 
+            background: var(--main-red); color: white; padding: 15px; font-weight: bold; 
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* Bildirim Kutusu (Notification Area) */
+        #notif-area { 
+            background: #fff3f3; max-height: 100px; overflow-y: auto; 
+            border-bottom: 2px solid var(--main-red); font-size: 13px;
+        }
+        .notif-item { 
+            padding: 10px; border-bottom: 1px solid #ffebeb; display: flex; 
+            justify-content: space-between; align-items: center; 
+        }
+        .notif-item button { width: auto; padding: 4px 10px; font-size: 11px; margin: 0; }
+
+        /* Arkadaş Listesi */
+        .friend-item { 
+            padding: 15px; border-bottom: 1px solid #f5f5f5; cursor: pointer; 
+            transition: 0.2s; display: flex; align-items: center;
+        }
+        .friend-item:hover { background: #fff5f5; }
+        .friend-item::before { content: "👤"; margin-right: 10px; }
+
+        /* Mesaj Balonları Süslendi */
+        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        .msg { padding: 10px 15px; margin: 8px; border-radius: 15px; max-width: 75%; position: relative; font-size: 15px; line-height: 1.4; }
+        .sent { background: #ffeded; color: #333; align-self: flex-end; border-bottom-right-radius: 2px; border: 1px solid #ffcccc; }
+        .received { background: white; color: #333; align-self: flex-start; border-bottom-left-radius: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+        .input-box { background: white; padding: 15px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
+        .input-box input { margin: 0; }
+        .input-box button { width: 100px; margin: 0; }
+
+        /* Mobil için Yan Paneli Kapatma Tuşu (Sadece Mobilde Görünür) */
+        #menu-toggle { display: none; background: none; border: none; font-size: 20px; color: white; cursor: pointer; }
+
+        @media (max-width: 700px) {
+            .sidebar { width: 100%; position: absolute; left: 0; top: 0; height: 100%; }
+            .sidebar.closed { left: -100%; }
+            #menu-toggle { display: block; }
+        }
     </style>
 </head>
 <body>
 
 <div id="auth-screen">
     <div class="box" id="login-box">
-        <h2 style="color:var(--wa-green)">Kacakwhatsappbeyin</h2>
+        <h2>Kaçak <span style="color:#000">Beyin</span></h2>
         <input type="email" id="email" placeholder="E-posta">
         <input type="password" id="pass" placeholder="Şifre">
         <button onclick="login()">Giriş Yap</button>
-        <p onclick="showRegister()" style="text-align:center; cursor:pointer; font-size:12px">Kayıt Ol</p>
+        <p onclick="showRegister()" style="text-align:center; cursor:pointer; font-size:12px; color: #666; margin-top:15px">Hala kayıt olmadın mı? <b>Kayıt Ol</b></p>
     </div>
 
     <div class="box hidden" id="register-box">
@@ -51,36 +113,48 @@
         <input type="password" id="reg-pass1" placeholder="Şifre">
         <input type="password" id="reg-pass2" placeholder="Şifre Tekrar">
         <button onclick="register()">Kayıt Ol</button>
-        <p onclick="showLogin()" style="text-align:center; cursor:pointer; font-size:12px">Giriş Yap</p>
+        <p onclick="showLogin()" style="text-align:center; cursor:pointer; font-size:12px; color: #666; margin-top:15px">Zaten hesabın var mı? <b>Giriş Yap</b></p>
     </div>
 </div>
 
 <div id="app-screen" class="hidden">
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="header">
             <span id="user-display">Profil</span>
-            <button onclick="logout()" style="width:60px; font-size:10px">Çıkış</button>
+            <button onclick="logout()" style="width:60px; font-size:10px; background:rgba(0,0,0,0.2)">Çıkış</button>
         </div>
-        <div style="padding:10px; background:#fff3cd" id="notif-area">
+        
+        <div id="notif-area"></div>
+
+        <div style="padding:15px; border-bottom: 1px solid #eee">
+            <input type="text" id="target-email" placeholder="Arkadaş ekle (e-posta)..." style="font-size: 13px;">
+            <button onclick="sendFriendRequest()">Arkadaş Ekle</button>
+        </div>
+        
+        <div id="friends-list" style="overflow-y: auto; flex:1">
             </div>
-        <div style="padding:10px">
-            <input type="text" id="target-email" placeholder="Arkadaşının e-postası...">
-            <button onclick="sendFriendRequest()">Ekle</button>
-        </div>
-        <div id="friends-list"></div>
     </div>
+
     <div class="chat-area">
-        <div class="header" id="current-chat-name">Sohbet Seçin</div>
-        <div class="messages" id="msg-list"></div>
+        <div class="header">
+            <button id="menu-toggle" onclick="toggleSidebar()">☰</button>
+            <span id="current-chat-name">Sohbet Seçin</span>
+            <span>🇹🇷</span>
+        </div>
+        
+        <div class="messages" id="msg-list">
+            <div style="text-align:center; color:#888; margin-top:100px;">Mesajlaşmaya başlamak için soldan birini seç.</div>
+        </div>
+
         <div class="input-box">
-            <input type="text" id="m-text" placeholder="Mesaj yazın...">
-            <button onclick="sendMessage()" style="width:80px">Gönder</button>
+            <input type="text" id="m-text" placeholder="Mesajını yaz..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()">Gönder</button>
         </div>
     </div>
 </div>
 
 <script>
-    // SENİN ANAHTARLARIN
+    // SENİN ANAHTARLARIN (HİÇ DOKUNMADIM)
     const firebaseConfig = {
         apiKey: "AIzaSyAOK6T1Wk2k95mgRd6FNaQ1zoCMrJU-kFo",
         authDomain: "kacakwhatsappbeyin.firebaseapp.com",
@@ -90,14 +164,17 @@
         appId: "1:250064701061:web:e025e7c2d9b0c623aa4bec"
     };
 
-    // Firebase Başlat
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.database();
 
     let currentChatUser = null;
 
-    // OTURUM KONTROLÜ
+    // Mobil için Panel Aç/Kapat
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('closed');
+    }
+
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -111,19 +188,16 @@
         }
     });
 
-    // KAYIT OL
     function register() {
         const name = document.getElementById('reg-name').value;
         const email = document.getElementById('reg-email').value;
         const p1 = document.getElementById('reg-pass1').value;
         const p2 = document.getElementById('reg-pass2').value;
-
         if (p1 !== p2) return alert("Şifreler aynı değil!");
-
         auth.createUserWithEmailAndPassword(email, p1).then(res => {
             res.user.updateProfile({ displayName: name });
             db.ref('users/' + btoa(email)).set({ name: name, email: email });
-            alert("Kayıt başarılı! Şimdi giriş yapabilirsin.");
+            alert("Kayıt başarılı!");
             showLogin();
         }).catch(e => alert(e.message));
     }
@@ -138,14 +212,14 @@
     function showRegister() { document.getElementById('login-box').classList.add('hidden'); document.getElementById('register-box').classList.remove('hidden'); }
     function showLogin() { document.getElementById('register-box').classList.add('hidden'); document.getElementById('login-box').classList.remove('hidden'); }
 
-    // ARKADAŞLIK SİSTEMİ
     function sendFriendRequest() {
         const target = document.getElementById('target-email').value;
         const myEmail = auth.currentUser.email;
-        if(target === myEmail) return alert("Kendine istek atamazsın!");
-        
+        if(!target) return;
+        if(target === myEmail) return alert("Kendini ekleyemezsin!");
         db.ref('requests/' + btoa(target) + '/' + btoa(myEmail)).set({ from: myEmail });
         alert("İstek gönderildi!");
+        document.getElementById('target-email').value = "";
     }
 
     function listenRequests() {
@@ -155,7 +229,10 @@
             area.innerHTML = "";
             snap.forEach(child => {
                 const sender = child.val().from;
-                area.innerHTML += `<div>${sender} <button onclick="acceptFriend('${sender}')">Kabul</button></div>`;
+                area.innerHTML += `<div class="notif-item">
+                    <span><b>${sender}</b> eklemek istiyor</span>
+                    <button onclick="acceptFriend('${sender}')">Kabul Et</button>
+                </div>`;
             });
         });
     }
@@ -165,7 +242,6 @@
         db.ref('friends/' + btoa(myEmail) + '/' + btoa(friendEmail)).set(true);
         db.ref('friends/' + btoa(friendEmail) + '/' + btoa(myEmail)).set(true);
         db.ref('requests/' + btoa(myEmail) + '/' + btoa(friendEmail)).remove();
-        alert("Artık arkadaşsınız!");
     }
 
     function loadFriends() {
@@ -175,29 +251,24 @@
             list.innerHTML = "";
             snap.forEach(child => {
                 const friendEmail = atob(child.key);
-                list.innerHTML += `<div style="padding:15px; border-bottom:1px solid #eee; cursor:pointer" onclick="openChat('${friendEmail}')">${friendEmail}</div>`;
+                list.innerHTML += `<div class="friend-item" onclick="openChat('${friendEmail}')">${friendEmail}</div>`;
             });
         });
     }
 
-    // MESAJLAŞMA
     function openChat(email) {
         currentChatUser = email;
         document.getElementById('current-chat-name').innerText = email;
+        if(window.innerWidth < 700) toggleSidebar(); // Mobilde arkadaş seçince paneli kapat
         loadMessages();
     }
 
     function sendMessage() {
-        if(!currentChatUser) return;
         const text = document.getElementById('m-text').value;
+        if(!currentChatUser || !text.trim()) return;
         const myEmail = auth.currentUser.email;
         const chatId = [btoa(myEmail), btoa(currentChatUser)].sort().join("_");
-        
-        db.ref('chats/' + chatId).push({
-            sender: myEmail,
-            text: text,
-            time: Date.now()
-        });
+        db.ref('chats/' + chatId).push({ sender: myEmail, text: text, time: Date.now() });
         document.getElementById('m-text').value = "";
     }
 
