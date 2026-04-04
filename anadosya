@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kacakwhatsappbeyin 💬</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+
+    <style>
+        /* WhatsApp Stili CSS */
+        :root { --wa-green: #075e54; --wa-light: #25d366; --bg: #e5ddd5; }
+        body { font-family: sans-serif; margin: 0; background: #dadbd3; }
+        .hidden { display: none !important; }
+        
+        /* Giriş Ekranı */
+        #auth-screen { display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; }
+        .box { background: white; padding: 30px; border-radius: 10px; width: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: var(--wa-light); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        
+        /* Ana Uygulama */
+        #app-screen { display: flex; height: 100vh; background: white; }
+        .sidebar { width: 350px; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+        .header { background: #ededed; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; }
+        .messages { flex: 1; padding: 20px; overflow-y: auto; }
+        .input-box { background: #f0f2f5; padding: 15px; display: flex; }
+        .msg { padding: 8px 12px; margin: 5px; border-radius: 10px; max-width: 70%; word-wrap: break-word; }
+        .sent { background: #dcf8c6; align-self: flex-end; margin-left: auto; }
+        .received { background: white; align-self: flex-start; }
+    </style>
+</head>
+<body>
+
+<div id="auth-screen">
+    <div class="box" id="login-box">
+        <h2 style="color:var(--wa-green)">Kacakwhatsappbeyin</h2>
+        <input type="email" id="email" placeholder="E-posta">
+        <input type="password" id="pass" placeholder="Şifre">
+        <button onclick="login()">Giriş Yap</button>
+        <p onclick="showRegister()" style="text-align:center; cursor:pointer; font-size:12px">Kayıt Ol</p>
+    </div>
+
+    <div class="box hidden" id="register-box">
+        <h2>Yeni Hesap</h2>
+        <input type="text" id="reg-name" placeholder="İsim Soyisim">
+        <input type="email" id="reg-email" placeholder="E-posta">
+        <input type="password" id="reg-pass1" placeholder="Şifre">
+        <input type="password" id="reg-pass2" placeholder="Şifre Tekrar">
+        <button onclick="register()">Kayıt Ol</button>
+        <p onclick="showLogin()" style="text-align:center; cursor:pointer; font-size:12px">Giriş Yap</p>
+    </div>
+</div>
+
+<div id="app-screen" class="hidden">
+    <div class="sidebar">
+        <div class="header">
+            <span id="user-display">Profil</span>
+            <button onclick="logout()" style="width:60px; font-size:10px">Çıkış</button>
+        </div>
+        <div style="padding:10px; background:#fff3cd" id="notif-area">
+            </div>
+        <div style="padding:10px">
+            <input type="text" id="target-email" placeholder="Arkadaşının e-postası...">
+            <button onclick="sendFriendRequest()">Ekle</button>
+        </div>
+        <div id="friends-list"></div>
+    </div>
+    <div class="chat-area">
+        <div class="header" id="current-chat-name">Sohbet Seçin</div>
+        <div class="messages" id="msg-list"></div>
+        <div class="input-box">
+            <input type="text" id="m-text" placeholder="Mesaj yazın...">
+            <button onclick="sendMessage()" style="width:80px">Gönder</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // SENİN ANAHTARLARIN
+    const firebaseConfig = {
+        apiKey: "AIzaSyAOK6T1Wk2k95mgRd6FNaQ1zoCMrJU-kFo",
+        authDomain: "kacakwhatsappbeyin.firebaseapp.com",
+        projectId: "kacakwhatsappbeyin",
+        storageBucket: "kacakwhatsappbeyin.firebasestorage.app",
+        messagingSenderId: "250064701061",
+        appId: "1:250064701061:web:e025e7c2d9b0c623aa4bec"
+    };
+
+    // Firebase Başlat
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    let currentChatUser = null;
+
+    // OTURUM KONTROLÜ
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            document.getElementById('user-display').innerText = user.displayName || user.email;
+            loadFriends();
+            listenRequests();
+        } else {
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('app-screen').classList.add('hidden');
+        }
+    });
+
+    // KAYIT OL
+    function register() {
+        const name = document.getElementById('reg-name').value;
+        const email = document.getElementById('reg-email').value;
+        const p1 = document.getElementById('reg-pass1').value;
+        const p2 = document.getElementById('reg-pass2').value;
+
+        if (p1 !== p2) return alert("Şifreler aynı değil!");
+
+        auth.createUserWithEmailAndPassword(email, p1).then(res => {
+            res.user.updateProfile({ displayName: name });
+            db.ref('users/' + btoa(email)).set({ name: name, email: email });
+            alert("Kayıt başarılı! Şimdi giriş yapabilirsin.");
+            showLogin();
+        }).catch(e => alert(e.message));
+    }
+
+    function login() {
+        const email = document.getElementById('email').value;
+        const pass = document.getElementById('pass').value;
+        auth.signInWithEmailAndPassword(email, pass).catch(e => alert(e.message));
+    }
+
+    function logout() { auth.signOut(); }
+    function showRegister() { document.getElementById('login-box').classList.add('hidden'); document.getElementById('register-box').classList.remove('hidden'); }
+    function showLogin() { document.getElementById('register-box').classList.add('hidden'); document.getElementById('login-box').classList.remove('hidden'); }
+
+    // ARKADAŞLIK SİSTEMİ
+    function sendFriendRequest() {
+        const target = document.getElementById('target-email').value;
+        const myEmail = auth.currentUser.email;
+        if(target === myEmail) return alert("Kendine istek atamazsın!");
+        
+        db.ref('requests/' + btoa(target) + '/' + btoa(myEmail)).set({ from: myEmail });
+        alert("İstek gönderildi!");
+    }
+
+    function listenRequests() {
+        const myEmailEnc = btoa(auth.currentUser.email);
+        db.ref('requests/' + myEmailEnc).on('value', snap => {
+            const area = document.getElementById('notif-area');
+            area.innerHTML = "";
+            snap.forEach(child => {
+                const sender = child.val().from;
+                area.innerHTML += `<div>${sender} <button onclick="acceptFriend('${sender}')">Kabul</button></div>`;
+            });
+        });
+    }
+
+    function acceptFriend(friendEmail) {
+        const myEmail = auth.currentUser.email;
+        db.ref('friends/' + btoa(myEmail) + '/' + btoa(friendEmail)).set(true);
+        db.ref('friends/' + btoa(friendEmail) + '/' + btoa(myEmail)).set(true);
+        db.ref('requests/' + btoa(myEmail) + '/' + btoa(friendEmail)).remove();
+        alert("Artık arkadaşsınız!");
+    }
+
+    function loadFriends() {
+        const myEmailEnc = btoa(auth.currentUser.email);
+        db.ref('friends/' + myEmailEnc).on('value', snap => {
+            const list = document.getElementById('friends-list');
+            list.innerHTML = "";
+            snap.forEach(child => {
+                const friendEmail = atob(child.key);
+                list.innerHTML += `<div style="padding:15px; border-bottom:1px solid #eee; cursor:pointer" onclick="openChat('${friendEmail}')">${friendEmail}</div>`;
+            });
+        });
+    }
+
+    // MESAJLAŞMA
+    function openChat(email) {
+        currentChatUser = email;
+        document.getElementById('current-chat-name').innerText = email;
+        loadMessages();
+    }
+
+    function sendMessage() {
+        if(!currentChatUser) return;
+        const text = document.getElementById('m-text').value;
+        const myEmail = auth.currentUser.email;
+        const chatId = [btoa(myEmail), btoa(currentChatUser)].sort().join("_");
+        
+        db.ref('chats/' + chatId).push({
+            sender: myEmail,
+            text: text,
+            time: Date.now()
+        });
+        document.getElementById('m-text').value = "";
+    }
+
+    function loadMessages() {
+        const myEmail = auth.currentUser.email;
+        const chatId = [btoa(myEmail), btoa(currentChatUser)].sort().join("_");
+        db.ref('chats/' + chatId).on('value', snap => {
+            const list = document.getElementById('msg-list');
+            list.innerHTML = "";
+            snap.forEach(child => {
+                const m = child.val();
+                const type = m.sender === myEmail ? 'sent' : 'received';
+                list.innerHTML += `<div class="msg ${type}">${m.text}</div>`;
+            });
+            list.scrollTop = list.scrollHeight;
+        });
+    }
+</script>
+</body>
+</html>
