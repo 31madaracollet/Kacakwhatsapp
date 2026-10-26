@@ -287,6 +287,19 @@ html[data-theme='dark'] .segmented button.active { background: #2a3942; color: #
 html[data-theme='dark'] .alert.error { color: #ff8a80; }
 html[data-theme='dark'] .alert.ok { color: #6ee7c8; }
 
+.demo-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+.demo-box .ghost-btn { width: 100%; }
+
 /* ------------------------------------------------------------ app shell */
 .app {
   height: 100%;

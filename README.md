@@ -47,4 +47,23 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 
 ## Canlı
 
-Vercel üzerinde yayında: https://zapmesaj.vercel.app
+- Uygulama: https://zapmesaj.vercel.app
+- Supabase projesi: `zapmesaj` (`szhpjbuuiltkqhhgmphm`)
+- Kaynak kod yedeği + SQL şeması: Google Drive → **ZapMesaj — Medya Deposu / exports**
+
+## Demo hesapları
+
+| E-posta | Şifre |
+| --- | --- |
+| demo@zapmesaj.app | ZapMesaj123 |
+| ayse@zapmesaj.app | ZapMesaj123 |
+| mehmet@zapmesaj.app | ZapMesaj123 |
+
+Giriş ekranındaki **Demo hesabıyla gir** düğmesiyle tek tıkla deneyebilirsin.
+Ayrıca kendi hesabını "Kayıt ol" sekmesinden saniyeler içinde açabilirsin.
+
+## Notlar
+
+- Durum (story) özelliği bilinçli olarak yok.
+- Medya dosyaları Supabase Storage (`media`, `avatars`) üzerinde tutulur; Drive klasörü
+  yedek/arşiv amacıyla kullanılır.

@@ -140,6 +140,30 @@ export function AuthScreen() {
             </button>
           </form>
 
+          <div className="demo-box">
+            <span>Hemen denemek ister misin?</span>
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={busy}
+              onClick={async () => {
+                setError(null)
+                setInfo(null)
+                setBusy(true)
+                try {
+                  await signIn('demo@zapmesaj.app', 'ZapMesaj123')
+                } catch (err: any) {
+                  setError(err.message || 'Demo hesabına giriş yapılamadı')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              Demo hesabıyla gir
+            </button>
+            <p className="tiny muted">demo@zapmesaj.app · ZapMesaj123</p>
+          </div>
+
           <p className="tiny muted center">
             Devam ederek uygulamanın kurallarını kabul etmiş olursun. Mesajların Supabase üzerinde saklanır.
           </p>
