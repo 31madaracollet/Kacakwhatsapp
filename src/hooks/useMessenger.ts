@@ -162,7 +162,20 @@ export function useMessenger() {
           return
         }
         setMessages((prev) => {
-          const list = prev[msg.chat_id] || []
+          if (!prev[msg.chat_id]) {
+            // sohbetin geçmişi henüz yüklenmemiş -> tamamını getir
+            supabase
+              .from('messages')
+              .select('*')
+              .eq('chat_id', msg.chat_id)
+              .order('created_at', { ascending: true })
+              .limit(300)
+              .then(({ data }) => {
+                if (data) setMessages((cur) => ({ ...cur, [msg.chat_id]: data as Message[] }))
+              })
+            return prev
+          }
+          const list = prev[msg.chat_id]
           if (list.some((m) => m.id === msg.id)) return prev
           return { ...prev, [msg.chat_id]: [...list, msg] }
         })
@@ -277,6 +290,30 @@ export function useMessenger() {
       typingChannel.current = null
     }
   }, [activeChatId, meId])
+
+  /* -------- realtime yedeği: açık sohbeti periyodik olarak tazele -------- */
+  useEffect(() => {
+    if (!meId || !activeChatId) return
+    const tick = async () => {
+      if (document.hidden) return
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', activeChatId)
+        .order('created_at', { ascending: true })
+        .limit(300)
+      if (!data) return
+      setMessages((prev) => {
+        const cur = prev[activeChatId] || []
+        const sameLen = cur.length === data.length
+        const sameLast = cur.length > 0 && data.length > 0 && cur[cur.length - 1].id === data[data.length - 1].id
+        if (sameLen && sameLast) return prev
+        return { ...prev, [activeChatId]: data as Message[] }
+      })
+    }
+    const id = window.setInterval(tick, 20000)
+    return () => window.clearInterval(id)
+  }, [meId, activeChatId])
 
   const sendTyping = useCallback(
     (name: string) => {
