@@ -382,6 +382,10 @@ function CreateUserModal({
           </button>
         </header>
         <div className="modal-body">
+          <p className="hint">
+            Bu hesap <strong>tüm uygulamalarda</strong> aynı anda açılır — ZapChat, Sucuk Agent,
+            TurkAI. Aynı e-posta ve şifreyle her yerde girilir.
+          </p>
           <label className="mini-label">Ad Soyad</label>
           <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ali Veli" />
           <label className="mini-label">E-posta</label>

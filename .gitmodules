@@ -18,3 +18,7 @@
 	path = hub/apps/TurkAI-app
 	url = https://github.com/31madaracollet/TurkAI-app.git
 	branch = main
+[submodule "hub/apps/Sucuk-Agent"]
+	path = hub/apps/Sucuk-Agent
+	url = https://github.com/31madaracollet/Sucuk-Agent.git
+	branch = main

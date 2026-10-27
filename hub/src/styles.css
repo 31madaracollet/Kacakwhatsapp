@@ -720,3 +720,15 @@ code {
 @media (max-width: 380px) {
   .app-grid { grid-template-columns: 1fr; }
 }
+
+/* yönetici: hesap açma bilgi notu */
+.hint {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(26, 115, 232, 0.08);
+  border: 1px solid rgba(26, 115, 232, 0.18);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-soft, #5f6368);
+}

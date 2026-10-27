@@ -89,3 +89,17 @@ https://<uygulama>/#sso_access_token=<jwt>&sso_refresh_token=<token>&sso_provide
 Uygulama `setSession({ access_token, refresh_token })` yapıp adres çubuğundaki hash'i temizler.
 Aynı Supabase projesi kullanıldığı için ek API gerekmez. Örnek uygulama: ZapChat
 (`src/hooks/useAuth.tsx` → `readSsoParams()`).
+
+## Tek hesap — hesaplar her uygulamada birlikte açılır
+
+`supabase/migrations/0002_tek_hesap.sql` şunları garanti eder:
+
+| Olay | Sonuç |
+|---|---|
+| Yönetici hub'da hesap açar | ZapChat profili + tüm açık uygulamalara erişim **otomatik** oluşur |
+| Bir uygulamada hesap açılır (kayıt) | Hub'da profil olarak düşer; yönetici panelinde görünür |
+| Hub'da hesap **kapatılır** | Supabase Auth'ta banlanır → hiçbir uygulamaya giremez, açık oturumları düşer |
+| Hub'da hesap **açılır** | Ban kalkar, tüm açık uygulamalara erişim verilir |
+| Hub'da hesap **silinir** | Uygulama profilleri de silinir |
+
+Aynı Supabase projesi (`szhpjbuuiltkqhhgmphm`) kullanıldığı için **tek şifre her yerde geçerli**.
