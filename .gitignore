@@ -3,3 +3,8 @@ dist
 .env.local
 .DS_Store
 *.log
+
+# hub
+hub/node_modules
+hub/dist
+hub/.env
