@@ -31,12 +31,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true
-    supabase.auth.getSession().then(async ({ data }) => {
+
+    // HappyProjects hub'ından gelen tek hesap (SSO) devri
+    const sso = readSsoParams()
+    const boot = async () => {
+      if (sso) {
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: sso.access_token,
+            refresh_token: sso.refresh_token,
+          })
+          if (!error && data.session) {
+            if (mounted) {
+              setSession(data.session)
+              await loadProfile(data.session.user.id)
+              setLoading(false)
+            }
+            return
+          }
+        } catch {
+          /* devir başarısızsa normal akışa düş */
+        }
+      }
+      const { data } = await supabase.auth.getSession()
       if (!mounted) return
       setSession(data.session)
       if (data.session?.user) await loadProfile(data.session.user.id)
       setLoading(false)
-    })
+    }
+    void boot()
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession)
@@ -119,6 +142,22 @@ export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth bir AuthProvider içinde kullanılmalı')
   return ctx
+}
+
+/** hub'dan gelen #sso_access_token=...&sso_refresh_token=... parametrelerini okur ve URL'yi temizler. */
+function readSsoParams(): { access_token: string; refresh_token: string } | null {
+  try {
+    const hash = window.location.hash?.replace(/^#/, '')
+    if (!hash) return null
+    const params = new URLSearchParams(hash)
+    const access_token = params.get('sso_access_token')
+    const refresh_token = params.get('sso_refresh_token')
+    if (!access_token || !refresh_token) return null
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    return { access_token, refresh_token }
+  } catch {
+    return null
+  }
 }
 
 function translateAuthError(msg: string) {
