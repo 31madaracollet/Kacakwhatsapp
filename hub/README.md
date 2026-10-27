@@ -3,30 +3,52 @@
 Tüm projelerin **tek hesap** altında buluştuğu merkez (hub) — Google tarzı bir panel.
 Tek oturumla bağlı tüm uygulamalara girilir; hesapları **yönetici** açar.
 
-- Canlı: https://happyprojects.vercel.app
+- Canlı: https://happyprojects-delta.vercel.app
 - Supabase: `zapmesaj` projesi (`szhpjbuuiltkqhhgmphm`)
 - Yönetici: **admin@happyprojects.app**
 
-## Konum
-
-Bu klasör şu an **`Kacakwhatsapp` deposunun içinde** (`hub/`) duruyor.
-Kendi deposu olan `31madaracollet/HappyProjects` hazır olduğunda bu klasör oraya taşınacak
-(`scripts/tasi.sh` bunu yapar). Vercel projesi `happyprojects` bu klasörü kök dizin kabul eder.
+## Yapı — tek ana depo, tüm depolar altında
 
 ```
-hub/                            ← bu klasör = ana site (hub)
-├── src/                        ← React + TypeScript + Vite arayüzü
-├── supabase/functions/hub-admin ← yönetici Edge Function kaynağı
-├── supabase/migrations/         ← tablo + RLS şeması
-└── scripts/bagla.sh            ← alt depoları (submodule) bağlar
+hub/                              ← ana site (hub), kendi deposu: HappyProjects
+├── src/                          ← React + TypeScript + Vite arayüzü
+├── supabase/
+│   ├── functions/hub-admin/      ← yönetici Edge Function kaynağı
+│   └── migrations/0001_hub.sql   ← tablolar + RLS + rol koruması
+├── scripts/
+│   ├── bagla.sh                  ← tüm depoları alt depo olarak bağlar
+│   └── tasi.sh                   ← hub'ı kendi deposuna taşır
+└── apps/                         ← ALT DEPOLAR (git submodule)
+    ├── Kacakwhatsapp/           → ZapChat
+    ├── haber-hatti/
+    ├── IsikHolding/
+    ├── AliKeremYayinlari/
+    ├── TurkAI-app/
+    ├── Sucuk-Agent/             → bağlanmayı bekliyor
+    └── TurkAIV2/                → boş depo
 ```
 
-## Bağlı uygulamalar
+Tek komutla hepsini indir:
 
-| Uygulama | Depo | Adres |
-|---|---|---|
-| ZapChat 💬 | `31madaracollet/Kacakwhatsapp` | https://zapmesaj.vercel.app |
-| Sucuk Agent 🤖 | `31madaracollet/Sucuk-Agent` | https://sucuk-agent.vercel.app |
+```bash
+git clone --recurse-submodules https://github.com/31madaracollet/HappyProjects.git
+# veya mevcut klonda:
+git submodule update --init --recursive
+```
+
+Alt depoları son hallerine getir:
+
+```bash
+./scripts/sync-submodules.sh      # her birinde git pull
+```
+
+## Uygulamalar
+
+| Uygulama | Depo | Adres | SSO |
+|---|---|---|---|
+| ZapChat 💬 | `Kacakwhatsapp` | https://zapmesaj.vercel.app | ✅ |
+| Sucuk Agent 🤖 | `Sucuk-Agent` | https://sucuk-agent.vercel.app | ⏳ |
+| TurkAI 🧠 | `TurkAI` | https://turkai.vercel.app | ⏳ |
 
 ## Özellikler
 
@@ -41,7 +63,7 @@ hub/                            ← bu klasör = ana site (hub)
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:5180
 npm run build    # dist/
 ```
 
@@ -53,4 +75,17 @@ npm run build    # dist/
 ## Veritabanı
 
 `supabase/migrations/0001_hub.sql` — `hub_profiles`, `hub_apps`, `hub_access`, `hub_activity`
-tabloları, RLS politikaları, yeni kullanıcı trigger'ı ve rol koruma tetikleyicisi.
+tabloları, RLS politikaları, yeni kullanıcı trigger'ı ve **rol koruma tetikleyicisi**
+(normal kullanıcı kendini admin yapamaz).
+
+## SSO sözleşmesi (uygulama tarafı)
+
+Hub, uygulamayı şu adresle açar:
+
+```
+https://<uygulama>/#sso_access_token=<jwt>&sso_refresh_token=<token>&sso_provider=happyprojects
+```
+
+Uygulama `setSession({ access_token, refresh_token })` yapıp adres çubuğundaki hash'i temizler.
+Aynı Supabase projesi kullanıldığı için ek API gerekmez. Örnek uygulama: ZapChat
+(`src/hooks/useAuth.tsx` → `readSsoParams()`).
