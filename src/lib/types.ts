@@ -8,6 +8,8 @@ export interface Profile {
   about: string | null
   last_seen: string
   created_at?: string
+  is_admin?: boolean
+  is_banned?: boolean
 }
 
 export interface Member {
@@ -56,4 +58,44 @@ export interface Reaction {
   user_id: string
   emoji: string
   created_at: string
+}
+
+/* ------------------------------------------------------------------ DURUM */
+export type StatusKind = 'text' | 'image' | 'video'
+
+export interface Status {
+  id: string
+  user_id: string
+  kind: StatusKind
+  body: string | null
+  media_url: string | null
+  media_meta: Record<string, any> | null
+  bg: string | null
+  created_at: string
+  expires_at: string
+  views?: number
+  seen_by_me?: boolean
+  profile?: Profile
+}
+
+/* ------------------------------------------------------------------ ARAMA */
+export type CallKind = 'audio' | 'video'
+export type CallState = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'active' | 'ended'
+
+export interface CallLog {
+  id: string
+  conversation_id: string | null
+  caller_id: string
+  callee_id: string
+  kind: CallKind
+  status: 'ringing' | 'accepted' | 'rejected' | 'missed' | 'ended'
+  started_at: string
+  ended_at: string | null
+  duration: number
+}
+
+export interface SearchHit {
+  message: Message
+  chat: Chat | null
+  chatTitle: string
 }

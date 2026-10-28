@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, LogOut, Search, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react'
-import type { Chat } from '../lib/types'
+import { Camera, LogOut, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search, ShieldCheck, UserMinus, UserPlus, Users, Video } from 'lucide-react'
+import type { Chat, CallLog } from '../lib/types'
 import type { Messenger } from '../hooks/useMessenger'
 import { Modal } from './Modal'
 import { Avatar } from './Avatar'
@@ -15,9 +15,11 @@ interface Props {
   m: Messenger
   onToast: (msg: string) => void
   onLeft: () => void
+  callLogs?: CallLog[]
+  onCall?: (kind: 'audio' | 'video') => void
 }
 
-export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft }: Props) {
+export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft, callLogs = [], onCall }: Props) {
   const { user } = useAuth()
   const meId = user?.id || ''
   const [adding, setAdding] = useState(false)
@@ -212,17 +214,58 @@ export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft }: Props
       )}
 
       {chat.type === 'direct' && (
-        <div className="info-actions">
-          <button
-            className="primary-btn"
-            onClick={async () => {
-              onClose()
-              onToast('Kişiyle sohbet açık 💬')
-            }}
-          >
-            Mesaj gönder
-          </button>
-        </div>
+        <>
+          <div className="info-actions">
+            <button
+              className="primary-btn"
+              onClick={async () => {
+                onClose()
+                onToast('Kişiyle sohbet açık 💬')
+              }}
+            >
+              Mesaj gönder
+            </button>
+            {onCall && (
+              <>
+                <button className="ghost-btn" onClick={() => onCall('audio')}>
+                  <Phone size={16} /> Sesli
+                </button>
+                <button className="ghost-btn" onClick={() => onCall('video')}>
+                  <Video size={16} /> Görüntülü
+                </button>
+              </>
+            )}
+          </div>
+
+          {callLogs.length > 0 && (
+            <div className="info-section">
+              <h4>Son aramalar</h4>
+              <div className="call-log-list">
+                {callLogs.slice(0, 8).map((log) => {
+                  const giden = log.caller_id === meId
+                  const kacti = log.status === 'missed' || log.status === 'rejected'
+                  const Icon = kacti ? PhoneMissed : giden ? PhoneOutgoing : PhoneIncoming
+                  return (
+                    <div className={`call-log ${kacti && !giden ? 'missed' : ''}`} key={log.id}>
+                      <Icon size={15} />
+                      <span>
+                        {giden ? 'Giden' : 'Gelen'} {log.kind === 'video' ? 'görüntülü' : 'sesli'} arama
+                      </span>
+                      <span className="tiny muted">
+                        {new Date(log.started_at).toLocaleString('tr-TR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </Modal>
   )

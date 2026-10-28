@@ -15,9 +15,10 @@ interface Props {
   onBack: () => void
   onOpenInfo: () => void
   onToast: (msg: string) => void
+  onCall?: (kind: 'audio' | 'video') => void
 }
 
-export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast }: Props) {
+export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast, onCall }: Props) {
   const { profile, user } = useAuth()
   const chat = m.chats.find((c) => c.id === chatId)
   const meId = user?.id || ''
@@ -157,10 +158,18 @@ export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast }: Props) {
           <button className="icon-btn light" title="Ara" onClick={() => setSearchOpen((v) => !v)}>
             <Search size={19} />
           </button>
-          <button className="icon-btn light" title="Sesli arama (yakında)" onClick={() => onToast('Sesli arama yakında geliyor 📞')}>
+          <button
+            className="icon-btn light"
+            title="Sesli arama"
+            onClick={() => (onCall ? onCall('audio') : onToast('Arama başlatılamadı'))}
+          >
             <Phone size={19} />
           </button>
-          <button className="icon-btn light" title="Görüntülü arama (yakında)" onClick={() => onToast('Görüntülü arama yakında geliyor 🎥')}>
+          <button
+            className="icon-btn light"
+            title="Görüntülü arama"
+            onClick={() => (onCall ? onCall('video') : onToast('Arama başlatılamadı'))}
+          >
             <Video size={19} />
           </button>
           <button className="icon-btn light" title="Sohbet bilgisi" onClick={onOpenInfo}>

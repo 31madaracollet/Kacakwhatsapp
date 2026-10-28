@@ -51,19 +51,23 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 - Supabase projesi: `zapmesaj` (`szhpjbuuiltkqhhgmphm`)
 - Kaynak kod yedeği + SQL şeması: Google Drive → **ZapMesaj — Medya Deposu / exports**
 
-## Demo hesapları
+## Hesaplar
 
-| E-posta | Şifre |
-| --- | --- |
-| demo@zapmesaj.app | ZapMesaj123 |
-| ayse@zapmesaj.app | ZapMesaj123 |
-| mehmet@zapmesaj.app | ZapMesaj123 |
+- **Kendi kendine kayıt kapalıdır** (`disable_signup: true`). Hesabı yalnızca yönetici açar
+  (HappyProjects hub'ı → Yönetim → Kullanıcı ekle).
+- Mevcut yöneticiler: `akif`, `admin`.
 
-Giriş ekranındaki **Demo hesabıyla gir** düğmesiyle tek tıkla deneyebilirsin.
-Ayrıca kendi hesabını "Kayıt ol" sekmesinden saniyeler içinde açabilirsin.
+## Özellikler
+
+- Metin, fotoğraf, video, ses kaydı ve dosya paylaşımı · gruplar · tepkiler · yanıtlama
+- **Durum (story)**: 24 saatlik metin/fotoğraf/video durumları, görüntüleme sayacı
+- **Sesli ve görüntülü arama**: WebRTC (Supabase Realtime broadcast ile sinyalleşme), arama kaydı `call_logs`
+- **Yönetim paneli**: kullanıcı listesi, yönetici yetkisi verme/alma, yasaklama (ban), duyuru yayınlama, istatistikler
 
 ## Notlar
 
-- Durum (story) özelliği bilinçli olarak yok.
+- Durum (story) 24 saat sonra otomatik olarak kaybolur (RLS `expires_at` filtresi).
+- Yöneticilik `profiles.is_admin` ile verilir; ilk yöneticiler `akif` ve `admin`.
+- Aramalar P2P WebRTC ile kurulur; yalnızca STUN sunucuları kullanılır (TURN yok).
 - Medya dosyaları Supabase Storage (`media`, `avatars`) üzerinde tutulur; Drive klasörü
   yedek/arşiv amacıyla kullanılır.
