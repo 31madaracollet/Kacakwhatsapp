@@ -1780,3 +1780,47 @@ html[data-theme='dark'] .composer { background: #111b21; }
 }
 .call-waiting p { margin: 0; font-size: 13.5px; color: rgba(255, 255, 255, 0.8); }
 .call-mini-label { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ====================================================== BİLDİRİM DÜĞMESİ */
+.notif-btn.off {
+  opacity: 0.62;
+}
+.notif-btn.on {
+  background: rgba(255, 255, 255, 0.22);
+  position: relative;
+}
+.notif-btn.on::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38e07b;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+.notif-banner {
+  margin: 8px 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--border, #d7e3df);
+  background: #fff8e6;
+  color: #6b4a00;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+[data-theme='dark'] .notif-banner {
+  background: rgba(255, 214, 102, 0.12);
+  color: #ffd666;
+  border-color: rgba(255, 214, 102, 0.35);
+}
+.notif-banner:hover {
+  filter: brightness(0.98);
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { deleteMediaByUrl, supabase } from '../lib/supabase'
 import { mapChat, mapMember, mapMessage, mapProfile, mapReaction } from '../lib/map'
 import type { Chat, Member, Message, Reaction } from '../lib/types'
 import { useAuth } from './useAuth'
@@ -492,6 +492,8 @@ export function useMessenger() {
         const { error } = await supabase.rpc('admin_delete_message', { mid: msg.id })
         if (error) throw new Error('Bu mesajı silme yetkin yok')
       }
+      // yer kaplamasın: dosyayı depodan da kaldır (kendi dosyamız değilse yönetici yolu denenir)
+      if (msg.media_url) await deleteMediaByUrl(msg.media_url)
     },
     [meId],
   )

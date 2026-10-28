@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CircleDot, LogOut, MessageSquarePlus, Moon, Search, ShieldCheck, Sun, UserCircle2, Users } from 'lucide-react'
+import { Bell, BellOff, CircleDot, LogOut, MessageSquarePlus, Moon, Search, ShieldCheck, Sun, UserCircle2, Users } from 'lucide-react'
 import type { Messenger } from '../hooks/useMessenger'
 import { useAuth } from '../hooks/useAuth'
 import { Avatar } from './Avatar'
@@ -15,11 +15,27 @@ interface Props {
   onStatus?: () => void
   onAdmin?: () => void
   statusCount?: number
+  notifOn?: boolean
+  notifAvailable?: boolean
+  onToggleNotif?: () => void
 }
 
 type Filter = 'all' | 'unread' | 'groups'
 
-export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTheme, onStatus, onAdmin, statusCount = 0 }: Props) {
+export function Sidebar({
+  m,
+  onNewChat,
+  onNewGroup,
+  onProfile,
+  theme,
+  onToggleTheme,
+  onStatus,
+  onAdmin,
+  statusCount = 0,
+  notifOn = false,
+  notifAvailable = true,
+  onToggleNotif,
+}: Props) {
   const { profile, signOut } = useAuth()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -87,6 +103,21 @@ export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTh
           <button className="icon-btn light" title="Yeni sohbet" onClick={onNewChat}>
             <MessageSquarePlus size={19} />
           </button>
+          {onToggleNotif && (
+            <button
+              className={`icon-btn light notif-btn ${notifOn ? 'on' : 'off'}`}
+              title={
+                !notifAvailable
+                  ? 'Bu tarayıcı bildirimleri desteklemiyor'
+                  : notifOn
+                    ? 'Bildirimler açık — kapatmak için dokun'
+                    : 'Bildirimleri etkinleştir'
+              }
+              onClick={onToggleNotif}
+            >
+              {notifOn ? <Bell size={19} /> : <BellOff size={19} />}
+            </button>
+          )}
           <button className="icon-btn light" title="Tema" onClick={onToggleTheme}>
             {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
           </button>
@@ -127,6 +158,12 @@ export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTh
           </button>
         ))}
       </div>
+
+      {onToggleNotif && notifAvailable && !notifOn && (
+        <button className="notif-banner" onClick={onToggleNotif}>
+          <Bell size={15} /> Bildirimleri etkinleştir — yeni mesajları kaçırma
+        </button>
+      )}
 
       <div className="chat-list">
         {m.loading && <p className="muted center small pad">Sohbetler yükleniyor...</p>}
