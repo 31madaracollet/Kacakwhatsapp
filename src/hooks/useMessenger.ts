@@ -89,7 +89,7 @@ export function useMessenger() {
 
       const [{ data: chatRows, error: cErr }, { data: memberRows }, { data: msgRows }] = await Promise.all([
         supabase.from('conversations').select('*').in('id', ids),
-        supabase.from('conversation_members').select('*, profile:profiles(*)').in('conversation_id', ids),
+        supabase.from('conversation_members').select('*, profile:profiles!conversation_members_user_id_fkey(*)').in('conversation_id', ids),
         supabase
           .from('messages')
           .select('*')
