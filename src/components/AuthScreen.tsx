@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
-import { AtSign, Lock, Mail, MessageCircle, Phone, ShieldCheck, User, UserPlus, Zap } from 'lucide-react'
+import { AtSign, FileText, Lock, Mail, MessageCircle, Phone, ShieldCheck, User, UserPlus, Zap } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { Modal } from './Modal'
+import { TermsBody } from './TermsScreen'
+import { MESSAGE_RETENTION_DAYS, TERMS_VERSION } from '../lib/terms'
 
 type Mode = 'login' | 'register'
 
@@ -15,6 +18,11 @@ export function AuthScreen() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [kabul, setKabul] = useState(false)
+  // doğrudan bağlantı: /?sozlesme=1 → hüküm ve koşullar penceresi açık gelir
+  const [termsOpen, setTermsOpen] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('sozlesme'),
+  )
 
   const switchMode = (next: Mode) => {
     setMode(next)
@@ -32,7 +40,12 @@ export function AuthScreen() {
       if (mode === 'login') {
         await signIn(email, password)
       } else {
-        const { needsConfirm } = await signUp({ email, password, username, fullName })
+        if (!kabul) {
+          setError('Devam etmek için hüküm ve koşulları kabul etmelisin')
+          return
+        }
+        // onay, hesap oluşturulurken sunucuya yazılır (artık ikinci kez sorulmaz)
+        const { needsConfirm } = await signUp({ email, password, username, fullName, termsVersion: TERMS_VERSION })
         if (needsConfirm) {
           setInfo('Hesabın oluşturuldu. E-postana gelen onay bağlantısına tıkladıktan sonra giriş yapabilirsin.')
           setMode('login')
@@ -153,6 +166,18 @@ export function AuthScreen() {
               </button>
             </label>
 
+            {mode === 'register' && (
+              <label className="terms-check compact">
+                <input type="checkbox" checked={kabul} onChange={(e) => setKabul(e.target.checked)} />
+                <span>
+                  <button type="button" className="link-btn" onClick={() => setTermsOpen(true)}>
+                    Hüküm ve koşulları
+                  </button>{' '}
+                  okudum; mesajlarımın en fazla {MESSAGE_RETENTION_DAYS} gün saklanacağını anladım ve kabul ediyorum.
+                </span>
+              </label>
+            )}
+
             {error && <div className="alert error">{error}</div>}
             {info && <div className="alert ok">{info}</div>}
 
@@ -180,10 +205,18 @@ export function AuthScreen() {
           </div>
 
           <p className="tiny muted center">
-            Devam ederek uygulamanın kurallarını kabul etmiş olursun. Mesajların Supabase üzerinde saklanır.
+            <FileText size={13} />{' '}
+            <button type="button" className="link-btn" onClick={() => setTermsOpen(true)}>
+              Hüküm ve koşullar
+            </button>{' '}
+            · Mesajlar {MESSAGE_RETENTION_DAYS} gün sonra otomatik silinir.
           </p>
         </div>
       </div>
+
+      <Modal open={termsOpen} title="Hüküm ve Koşullar" onClose={() => setTermsOpen(false)} wide>
+        <TermsBody />
+      </Modal>
     </div>
   )
 }

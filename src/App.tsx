@@ -5,6 +5,7 @@ import { useMessenger } from './hooks/useMessenger'
 import { useStatuses } from './hooks/useStatuses'
 import { useCalls } from './hooks/useCalls'
 import { useAdmin } from './hooks/useAdmin'
+import { useRetention } from './hooks/useRetention'
 import { AuthScreen } from './components/AuthScreen'
 import { Sidebar } from './components/Sidebar'
 import { ChatWindow } from './components/ChatWindow'
@@ -15,6 +16,7 @@ import { ChatInfoModal } from './components/ChatInfoModal'
 import { StatusPanel } from './components/StatusPanel'
 import { CallOverlay } from './components/CallOverlay'
 import { AdminPanel } from './components/AdminPanel'
+import { TermsScreen } from './components/TermsScreen'
 import { otherMember, chatTitle } from './lib/utils'
 import {
   disableNotifications,
@@ -26,7 +28,7 @@ import {
 } from './lib/notify'
 
 export default function App() {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, termsAccepted } = useAuth()
   const m = useMessenger()
   const s = useStatuses()
   const c = useCalls()
@@ -41,6 +43,12 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [notifOn, setNotifOn] = useState(() => notificationsEnabled())
+
+  /* 3 günden eski mesajlar + dosyaları otomatik temizlenir */
+  useRetention((adet) => {
+    setToast(`Süresi dolan ${adet} dosya depodan silindi 🧹`)
+    window.setTimeout(() => setToast(null), 3200)
+  })
   const notifAvailable = notificationsSupported()
   const selectChatRef = useRef(m.selectChat)
   selectChatRef.current = m.selectChat
@@ -192,6 +200,9 @@ export default function App() {
 
   if (!user) return <AuthScreen />
 
+  /* hüküm ve koşullar kabul edilmeden uygulama açılmaz */
+  if (!termsAccepted) return <TermsScreen />
+
   const startCall = (kind: 'audio' | 'video') => {
     if (activeChat?.type === 'group') {
       showToast('Sesli/görüntülü arama şimdilik birebir sohbetlerde 👤')
@@ -271,7 +282,10 @@ export default function App() {
                 <CircleDot size={16} /> Durum ekle
               </button>
             </div>
-            <p className="tiny muted">Durumlar 24 saat sonra kaybolur · Aramalar uçtan uca WebRTC ile yapılır.</p>
+            <p className="tiny muted">
+              Durumlar 24 saat sonra kaybolur · Mesajlar 3 gün sonra otomatik silinir · Aramalar uçtan uca WebRTC
+              ile yapılır.
+            </p>
           </div>
         </main>
       )}

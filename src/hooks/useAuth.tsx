@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase, uploadAvatar } from '../lib/supabase'
+import { TERMS_VERSION } from '../lib/terms'
 import { mapProfile } from '../lib/map'
 import type { Profile } from '../lib/types'
 
@@ -10,11 +11,21 @@ interface AuthContextValue {
   profile: Profile | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (p: { email: string; password: string; username: string; fullName: string }) => Promise<{ needsConfirm: boolean }>
+  signUp: (p: {
+    email: string
+    password: string
+    username: string
+    fullName: string
+    /** kayıt sırasında kabul edilen hüküm ve koşullar sürümü */
+    termsVersion?: string
+  }) => Promise<{ needsConfirm: boolean }>
   signOut: () => Promise<void>
   saveProfile: (patch: Partial<Pick<Profile, 'full_name' | 'username' | 'about' | 'avatar_url'>>) => Promise<void>
   changeAvatar: (file: File) => Promise<void>
   refreshProfile: () => Promise<void>
+  /** hüküm ve koşulların güncel sürümü kabul edildi mi */
+  termsAccepted: boolean
+  acceptTerms: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -60,16 +71,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw new Error(translateAuthError(error.message))
   }
 
-  const signUp = async ({ email, password, username, fullName }: { email: string; password: string; username: string; fullName: string }) => {
+  const signUp = async ({
+    email,
+    password,
+    username,
+    fullName,
+    termsVersion,
+  }: {
+    email: string
+    password: string
+    username: string
+    fullName: string
+    termsVersion?: string
+  }) => {
     const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (cleanUsername.length < 3) throw new Error('Kullanıcı adı en az 3 karakter olmalı (harf, rakam, _)')
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { username: cleanUsername, full_name: fullName.trim() || cleanUsername } },
+      options: {
+        data: {
+          username: cleanUsername,
+          full_name: fullName.trim() || cleanUsername,
+          ...(termsVersion ? { sozlesme_surumu: termsVersion } : {}),
+        },
+      },
     })
     if (error) throw new Error(translateAuthError(error.message))
     return { needsConfirm: !data.session }
+  }
+
+  /** sunucu tarafındaki RPC ile onayı kaydeder (kolonu istemci doğrudan yazamaz) */
+  const acceptTerms = async () => {
+    const aktif = session?.user ?? (await supabase.auth.getSession()).data.session?.user
+    if (!aktif) throw new Error('Giriş gerekli')
+    const { error } = await supabase.rpc('sozlesme_kabul', { surum: TERMS_VERSION })
+    if (error) throw new Error(error.message)
+    await loadProfile(aktif.id)
   }
 
   const signOut = async () => {
@@ -119,6 +157,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         saveProfile,
         changeAvatar,
         refreshProfile,
+        termsAccepted: (profile?.terms_version ?? '') === TERMS_VERSION,
+        acceptTerms,
       }}
     >
       {children}

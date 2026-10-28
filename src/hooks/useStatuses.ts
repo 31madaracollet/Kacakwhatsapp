@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { deleteMediaByUrl, deleteMediaPaths, uploadMedia } from '../lib/storage'
+import { deleteMediaByUrl, deleteMediaUrls, uploadMedia } from '../lib/storage'
 import { prepareFile, humanSize, uploadErrorText } from '../lib/media'
 import { mapStatus } from '../lib/map'
 import type { Status, StatusKind } from '../lib/types'
@@ -57,21 +57,14 @@ export function useStatuses() {
     if (!meId) return
     void (async () => {
       try {
-        // sunucu yalnızca dosya yollarını döndürür; silmeyi Storage API yapıyor
+        // sunucu silinen durumların dosya adreslerini döndürür; silmeyi depo katmanı yapıyor
         const [{ data: suresi }, { data: sahipsiz }] = await Promise.all([
           supabase.rpc('purge_expired_statuses'),
           supabase.rpc('purge_orphan_media'),
         ])
-        const yollar = [...(Array.isArray(suresi) ? suresi : []), ...(Array.isArray(sahipsiz) ? sahipsiz : [])]
+        const adresler = [...(Array.isArray(suresi) ? suresi : []), ...(Array.isArray(sahipsiz) ? sahipsiz : [])]
           .filter((p): p is string => typeof p === 'string' && p.length > 0)
-        // yalnızca kendi yüklediğimiz dosyalar silinebilir (Storage RLS)
-        for (let i = 0; i < yollar.length; i += 50) {
-          try {
-            await deleteMediaPaths(yollar.slice(i, i + 50))
-          } catch {
-            /* yoksay */
-          }
-        }
+        await deleteMediaUrls(adresler)
         await load()
       } catch {
         /* yoksay */

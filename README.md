@@ -64,6 +64,9 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 - Yeni kayıtta kullanıcı adı benzersizleştirilir (`benzersiz_kullanici_adi`), profil satırı
   `handle_new_user` trigger'ı ile otomatik oluşturulur.
 - Mevcut yöneticiler: `akif`, `admin`.
+- Kayıt sırasında **hüküm ve koşullar** onayı zorunludur; onay sürümü
+  `profiles.sozlesme_surumu` / `sozlesme_tarihi` alanlarına yazılır
+  (`sozlesme_kabul` RPC'si). Onay yoksa uygulama açılmaz.
 
 ## Özellikler
 
@@ -75,6 +78,11 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 ## Notlar
 
 - Durum (story) 24 saat sonra otomatik olarak kaybolur (RLS `expires_at` filtresi).
+- **Mesajlar 3 gün saklanır:** `purge_expired_messages()` üç günden eski mesajları siler,
+  dosyaları da (fotoğraf/video/ses) depodan temizler. Temizlik uygulama açılışında,
+  sekme öne gelince ve 10 dakikada bir çalışır (`src/hooks/useRetention.ts`).
+- Hüküm ve koşullar metni `src/lib/terms.ts` içinde tek kaynaktan yönetilir; metin
+  değişince `TERMS_VERSION` artırılır ve herkes yeniden onaylar.
 - Yöneticilik `profiles.is_admin` ile verilir; ilk yöneticiler `akif` ve `admin`.
 - Aramalar P2P WebRTC ile kurulur; STUN + açık TURN sunucuları kullanılır.
 - Medya dosyaları Supabase Storage (`media`, `avatars`) üzerinde tutulur; Drive klasörü

@@ -14,6 +14,8 @@ export function mapProfile(p: any): Profile | undefined {
     created_at: p.created_at,
     is_admin: p.is_admin ?? false,
     is_banned: p.is_banned ?? false,
+    terms_version: p.sozlesme_surumu ?? p.terms_version ?? null,
+    terms_accepted_at: p.sozlesme_tarihi ?? p.terms_accepted_at ?? null,
   }
 }
 
