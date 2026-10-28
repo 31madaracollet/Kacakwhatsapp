@@ -23,6 +23,7 @@ export function StatusPanel({ s, meId, onClose, onToast }: Props) {
   const [kind, setKind] = useState<StatusKind>('text')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
+  const gonderiyor = useRef(false)
 
   const startViewing = (items: Status[]) => {
     if (!items.length) return
@@ -30,7 +31,9 @@ export function StatusPanel({ s, meId, onClose, onToast }: Props) {
   }
 
   const create = async () => {
+    if (gonderiyor.current) return // çift dokunuşta iki durum paylaşılmasın
     if (!text.trim() && !file) return
+    gonderiyor.current = true
     setBusy(true)
     setProgress('Paylaşılıyor…')
     try {
@@ -43,6 +46,7 @@ export function StatusPanel({ s, meId, onClose, onToast }: Props) {
     } catch (e: any) {
       onToast?.(e?.message || 'Durum paylaşılamadı')
     } finally {
+      gonderiyor.current = false
       setBusy(false)
       setProgress('')
     }
@@ -58,6 +62,7 @@ export function StatusPanel({ s, meId, onClose, onToast }: Props) {
           </button>
         </header>
 
+        {!composer && (
         <div className="durum-list">
           <button className="durum-row mine" onClick={() => setComposer(true)}>
             <div className="durum-ring add">
@@ -112,6 +117,7 @@ export function StatusPanel({ s, meId, onClose, onToast }: Props) {
             </div>
           )}
         </div>
+        )}
 
         {composer && (
           <div className="durum-composer">

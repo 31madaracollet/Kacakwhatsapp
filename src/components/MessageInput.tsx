@@ -84,6 +84,7 @@ export function MessageInput({
   }, [])
 
   const submit = async () => {
+    if (busy) return // çift dokunuşta iki mesaj gitmesin
     const value = text.trim()
     if (!value) return
     if (editing) {
@@ -101,7 +102,7 @@ export function MessageInput({
   }
 
   const handleFiles = async (files: FileList | null, kind: AttachKind) => {
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0 || busy) return
     setAttachOpen(false)
     setBusy(true)
     try {

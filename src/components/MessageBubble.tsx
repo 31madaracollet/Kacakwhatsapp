@@ -4,6 +4,7 @@ import {
   CheckCheck,
   Copy,
   Download,
+  Film,
   FileText,
   MoreVertical,
   Pause,
@@ -52,6 +53,7 @@ export function MessageBubble({
   const mine = message.sender_id === meId
   const [menu, setMenu] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [videoBozuk, setVideoBozuk] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -138,15 +140,28 @@ export function MessageBubble({
               />
             )}
 
-            {message.type === 'video' && message.media_url && (
+            {message.type === 'video' && message.media_url && !videoBozuk && (
               <video
                 className="media-video"
                 src={message.media_url}
                 controls
                 preload="metadata"
                 playsInline
+                onError={() => setVideoBozuk(true)}
                 onDoubleClick={() => onOpenMedia(message.media_url!, 'video')}
               />
+            )}
+
+            {message.type === 'video' && message.media_url && videoBozuk && (
+              <a className="file-card" href={message.media_url} target="_blank" rel="noreferrer" download>
+                <span className="file-icon">
+                  <Film size={22} />
+                </span>
+                <div>
+                  <strong>Video açılamadı</strong>
+                  <span className="muted tiny">İndirmek için dokun · {message.media_name || 'video'}</span>
+                </div>
+              </a>
             )}
 
             {message.type === 'audio' && message.media_url && (
