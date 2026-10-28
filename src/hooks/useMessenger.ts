@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { deleteMediaByUrl, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { deleteMediaByUrl } from '../lib/storage'
 import { mapChat, mapMember, mapMessage, mapProfile, mapReaction } from '../lib/map'
 import type { Chat, Member, Message, Reaction } from '../lib/types'
 import { useAuth } from './useAuth'

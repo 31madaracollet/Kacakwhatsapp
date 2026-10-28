@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deleteMediaByUrl, supabase, uploadMedia } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { deleteMediaByUrl, deleteMediaPaths, uploadMedia } from '../lib/storage'
 import { prepareFile, humanSize, uploadErrorText } from '../lib/media'
 import { mapStatus } from '../lib/map'
 import type { Status, StatusKind } from '../lib/types'
@@ -65,9 +66,8 @@ export function useStatuses() {
           .filter((p): p is string => typeof p === 'string' && p.length > 0)
         // yalnızca kendi yüklediğimiz dosyalar silinebilir (Storage RLS)
         for (let i = 0; i < yollar.length; i += 50) {
-          const parca = yollar.slice(i, i + 50)
           try {
-            await supabase.storage.from('media').remove(parca)
+            await deleteMediaPaths(yollar.slice(i, i + 50))
           } catch {
             /* yoksay */
           }

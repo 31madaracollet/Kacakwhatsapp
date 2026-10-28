@@ -29,25 +29,6 @@ export function publicUrl(bucket: string, path: string) {
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
 }
 
-/** Dosyayı Supabase Storage'a yükler ve herkese açık URL döner. */
-export async function uploadMedia(
-  file: Blob,
-  folder: string,
-  name: string,
-  bucket = MEDIA_BUCKET,
-): Promise<{ url: string; path: string; size: number; name: string }> {
-  const ext = extOf(name || (file instanceof File ? file.name : 'dosya'))
-  const path = `${folder}/${crypto.randomUUID()}.${ext}`
-  const contentType = file.type || 'application/octet-stream'
-  const { error } = await supabase.storage.from(bucket).upload(path, file, {
-    contentType,
-    cacheControl: '31536000',
-    upsert: false,
-  })
-  if (error) throw error
-  return { url: publicUrl(bucket, path), path, size: file.size, name: name || `dosya.${ext}` }
-}
-
 /** Fotoğrafı ortadan kare kırpar, 512 px'e küçültür (profil fotoğrafı bozulmasın). */
 export async function squareImage(file: File | Blob, size = 512): Promise<Blob> {
   try {
@@ -87,26 +68,6 @@ function loadImage(file: Blob): Promise<HTMLImageElement> {
     }
     img.src = url
   })
-}
-
-/**
- * Yüklenen bir dosyayı depodan (Storage) siler; böylece yer kaplamaz.
- * URL'den yolu çıkarır. Sahibi olmadığımız dosyalarda yönetici RPC'sini dener.
- */
-export async function deleteMediaByUrl(url?: string | null, bucket = MEDIA_BUCKET): Promise<boolean> {
-  if (!url) return false
-  const marker = `/object/public/${bucket}/`
-  const at = url.indexOf(marker)
-  if (at < 0) return false
-  const path = decodeURIComponent(url.slice(at + marker.length).split('?')[0])
-  if (!path) return false
-
-  try {
-    const { error } = await supabase.storage.from(bucket).remove([path])
-    return !error
-  } catch {
-    return false
-  }
 }
 
 export async function uploadAvatar(userId: string, file: Blob) {

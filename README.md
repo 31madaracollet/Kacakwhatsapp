@@ -31,6 +31,12 @@ cp .env.example .env   # Supabase URL + anon key gir
 npm run dev
 ```
 
+## Medya deposu
+
+Varsayılan: Supabase Storage (`media`, `avatars`). Cloudflare R2'ye (10 GB bedava,
+çıkış trafiği ücretsiz) geçmek için `KURULUM-R2.md` dosyasındaki adımları izle.
+Kod her iki deposu da destekler; R2 adresi tanımlı değilse otomatik Supabase'e döner.
+
 ## Ortam değişkenleri
 
 ```
