@@ -23,23 +23,27 @@ export function CallOverlay({ c }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [blocked, setBlocked] = useState(false)
   const { call, state, incoming } = c
+  const videoMode = call?.kind === 'video'
 
-  /* sesli aramada sesin çalması: uzak ses akışını <audio>ya bağla */
+  /* SESLİ aramada: uzak ses akışını <audio> elemanına bağla.
+     Görüntülü aramada akış <video> üzerinde kalır (Safari aynı akışı iki elemana bağlayınca
+     görüntü siyah kalabiliyor). */
   useEffect(() => {
     const el = audioRef.current
     if (!el) return
+    if (videoMode) {
+      if (el.srcObject) el.srcObject = null
+      return
+    }
     if (el.srcObject !== c.remoteStream) el.srcObject = c.remoteStream
     el.muted = false
     el.volume = 1
     if (c.remoteStream) {
       el.play()
         .then(() => setBlocked(false))
-        .catch(() => {
-          /* tarayıcı otomatik oynatmayı engelledi → kullanıcı dokunuşu beklenir */
-          setBlocked(true)
-        })
+        .catch(() => setBlocked(true))
     }
-  }, [c.remoteStream])
+  }, [c.remoteStream, videoMode])
 
   const resumeAudio = () => {
     const el = audioRef.current
@@ -79,47 +83,65 @@ export function CallOverlay({ c }: Props) {
       ? 'Aranıyor…'
       : state === 'connecting'
         ? 'Bağlanıyor…'
-        : formatDuration(c.seconds)
+        : state === 'active'
+          ? formatDuration(c.seconds)
+          : 'Bağlantı kuruluyor…'
 
-  const videoMode = call.kind === 'video'
+  const remoteHasVideo = Boolean(c.remoteStream && c.remoteStream.getVideoTracks().length > 0)
 
   return (
     <div className={`call-overlay ${videoMode ? 'video-mode' : ''}`} onClick={resumeAudio}>
-      {/* sesli aramada ses buradan gelir */}
+      {/* sesli aramada ses buradan gelir (display:none bazı tarayıcılarda çalmıyor) */}
       <audio ref={audioRef} autoPlay playsInline className="call-audio" />
 
       <div className="call-card">
-        {videoMode && state === 'active' ? (
-          <div className="call-stage">
-            <Stream stream={c.remoteStream} />
-            <div className="call-pip">
-              <Stream stream={c.localStream} muted />
+        {videoMode ? (
+          <>
+            <div className="call-stage">
+              <Stream stream={c.remoteStream} />
+              {!remoteHasVideo && (
+                <div className="call-waiting">
+                  <Avatar name={call.peerName} src={call.peerAvatar} size={92} seed={call.peerId} />
+                  <p>{durum}</p>
+                </div>
+              )}
+              {c.localStream && (
+                <div className="call-pip">
+                  <Stream stream={c.localStream} muted />
+                </div>
+              )}
             </div>
-          </div>
+            <span className="call-mini-label">
+              <Video size={13} /> {call.peerName} · {durum}
+            </span>
+          </>
         ) : (
           <>
             <Avatar name={call.peerName} src={call.peerAvatar} size={110} seed={call.peerId} />
             <h2>{call.peerName}</h2>
             <p className="call-status">
-              {videoMode ? <Video size={14} /> : <Volume2 size={14} />} {durum}
+              <Volume2 size={14} /> {durum}
             </p>
+            {blocked && (
+              <button className="call-unlock" onClick={resumeAudio}>
+                <Volume2 size={16} /> Sesi aç (tarayıcı sesi engelledi)
+              </button>
+            )}
           </>
         )}
 
         {c.error && <p className="call-error">{c.error}</p>}
-
-        {blocked && !videoMode && (
-          <button className="call-unlock" onClick={resumeAudio}>
-            <Volume2 size={16} /> Sesi aç (tarayıcı sesi engelledi)
-          </button>
-        )}
 
         <div className="call-actions" onClick={(e) => e.stopPropagation()}>
           <button className={`call-btn ghost ${c.muted ? 'off' : ''}`} onClick={c.toggleMute} title="Sesi kapat">
             {c.muted ? <MicOff size={22} /> : <Mic size={22} />}
           </button>
           {videoMode && (
-            <button className={`call-btn ghost ${c.cameraOff ? 'off' : ''}`} onClick={c.toggleCamera} title="Kamerayı kapat">
+            <button
+              className={`call-btn ghost ${c.cameraOff ? 'off' : ''}`}
+              onClick={c.toggleCamera}
+              title="Kamerayı kapat"
+            >
               {c.cameraOff ? <VideoOff size={22} /> : <Video size={22} />}
             </button>
           )}
@@ -127,11 +149,6 @@ export function CallOverlay({ c }: Props) {
             <PhoneOff size={26} />
           </button>
         </div>
-
-        {videoMode && state === 'active' && <span className="call-mini-label">{durum}</span>}
-        {!videoMode && state === 'active' && (
-          <span className="call-mini-label">Sesli arama · mikrofon açık</span>
-        )}
       </div>
     </div>
   )

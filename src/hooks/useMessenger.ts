@@ -63,6 +63,7 @@ export function useMessenger() {
   const typingChannel = useRef<RealtimeChannel | null>(null)
   const lastTypingSent = useRef(0)
   const pendingRead = useRef<Set<string>>(new Set())
+  const tempIds = useRef<Set<string>>(new Set())
 
   activeRef.current = activeChatId
   chatsRef.current = chats
@@ -136,6 +137,28 @@ export function useMessenger() {
     loadAll()
   }, [loadAll])
 
+  /** tek sohbetin mesajlarını tazele (realtime + yoklama) */
+  const fetchChatMessages = useCallback(async (chatId: string, limit = 300) => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', chatId)
+      .order('created_at', { ascending: true })
+      .limit(limit)
+    if (!data) return
+    const fresh = data.map(mapMessage)
+    setMessages((prev) => {
+      const cur = prev[chatId] || []
+      if (cur.length === fresh.length && cur.length > 0 && cur[cur.length - 1].id === fresh[fresh.length - 1].id) {
+        return prev
+      }
+      // yerelde olup sunucuda olmayan (henüz commit edilmemiş) mesajları koru
+      const ids = new Set(fresh.map((m) => m.id))
+      const extra = cur.filter((m) => !ids.has(m.id) && tempIds.current.has(m.id))
+      return { ...prev, [chatId]: [...fresh, ...extra] }
+    })
+  }, [])
+
   /* ------------------------------------------------------------ realtime */
   useEffect(() => {
     if (!meId) return
@@ -149,116 +172,179 @@ export function useMessenger() {
       }, 450)
     }
 
-    const channel = supabase
-      .channel('zapmesaj-db')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const msg = mapMessage(payload.new)
-        const known = chatsRef.current.some((c) => c.id === msg.chat_id)
-        if (!known) {
-          loadAll()
-          return
+    /** gelen mesajı listeye ekle */
+    const onNewMessage = (row: any) => {
+      const msg = mapMessage(row)
+      const known = chatsRef.current.some((c) => c.id === msg.chat_id)
+      if (!known) {
+        loadAll()
+        return
+      }
+      setMessages((prev) => {
+        const list = prev[msg.chat_id]
+        if (!list) {
+          void fetchChatMessages(msg.chat_id)
+          return prev
         }
-        setMessages((prev) => {
-          if (!prev[msg.chat_id]) {
-            supabase
-              .from('messages')
-              .select('*')
-              .eq('conversation_id', msg.chat_id)
-              .order('created_at', { ascending: true })
-              .limit(300)
-              .then(({ data }) => {
-                if (data) setMessages((cur) => ({ ...cur, [msg.chat_id]: data.map(mapMessage) }))
-              })
-            return prev
-          }
-          const list = prev[msg.chat_id]
-          if (list.some((m) => m.id === msg.id)) return prev
-          return { ...prev, [msg.chat_id]: [...list, msg] }
-        })
-        setChats((prev) =>
-          prev.map((c) => (c.id === msg.chat_id ? { ...c, last_message_at: msg.created_at } : c)),
-        )
-        if (msg.sender_id !== meId) {
-          if (activeRef.current === msg.chat_id) {
-            void markRead(msg.chat_id)
-          } else {
-            beep()
-          }
+        if (list.some((m) => m.id === msg.id)) return prev
+        return { ...prev, [msg.chat_id]: [...list, msg] }
+      })
+      setChats((prev) => prev.map((c) => (c.id === msg.chat_id ? { ...c, last_message_at: msg.created_at } : c)))
+      if (msg.sender_id !== meId) {
+        if (activeRef.current === msg.chat_id) {
+          void markRead(msg.chat_id)
+        } else {
+          beep()
         }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-        const msg = mapMessage(payload.new)
-        setMessages((prev) => {
-          const list = prev[msg.chat_id]
-          if (!list) return prev
-          return { ...prev, [msg.chat_id]: list.map((m) => (m.id === msg.id ? msg : m)) }
-        })
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-        const old = payload.old as any
-        const chatId = old.conversation_id
-        if (!chatId) return
-        setMessages((prev) => {
-          const list = prev[chatId]
-          if (!list) return prev
-          return { ...prev, [chatId]: list.filter((m) => m.id !== old.id) }
-        })
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, (payload) => {
-        setReactions((prev) => {
-          if (payload.eventType === 'INSERT') {
-            const r = mapReaction(payload.new)
-            if (prev.some((x) => x.message_id === r.message_id && x.user_id === r.user_id)) return prev
-            return [...prev, r]
-          }
-          if (payload.eventType === 'UPDATE') {
-            const r = mapReaction(payload.new)
-            return prev.map((x) => (x.message_id === r.message_id && x.user_id === r.user_id ? r : x))
-          }
-          const old = mapReaction(payload.old)
-          return prev.filter((x) => !(x.message_id === old.message_id && x.user_id === old.user_id))
-        })
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, () => {
-        scheduleReload()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        scheduleReload()
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-        const p = mapProfile(payload.new)
-        if (!p) return
-        setChats((prev) =>
-          prev.map((c) => ({
-            ...c,
-            members: c.members.map((m) => (m.user_id === p.id ? { ...m, profile: p } : m)),
-          })),
-        )
-      })
-      .subscribe()
+      }
+    }
 
-    /* presence */
-    const presence = supabase.channel('zapmesaj-presence', { config: { presence: { key: meId } } })
-    presence
-      .on('presence', { event: 'sync' }, () => {
-        setOnlineUsers(new Set(Object.keys(presence.presenceState())))
+    const onUpdatedMessage = (row: any) => {
+      const msg = mapMessage(row)
+      setMessages((prev) => {
+        const list = prev[msg.chat_id]
+        if (!list) return prev
+        return { ...prev, [msg.chat_id]: list.map((m) => (m.id === msg.id ? msg : m)) }
       })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presence.track({ user_id: meId, online_at: new Date().toISOString() })
-        }
-      })
+    }
 
-    const heartbeat = setInterval(() => {
+    const onDeletedMessage = (old: any) => {
+      const chatId = old?.conversation_id
+      if (!chatId) return
+      setMessages((prev) => {
+        const list = prev[chatId]
+        if (!list) return prev
+        return { ...prev, [chatId]: list.filter((m) => m.id !== old.id) }
+      })
+    }
+
+    const onReaction = (payload: any) => {
+      setReactions((prev) => {
+        if (payload.eventType === 'INSERT') {
+          const r = mapReaction(payload.new)
+          if (prev.some((x) => x.message_id === r.message_id && x.user_id === r.user_id)) return prev
+          return [...prev, r]
+        }
+        if (payload.eventType === 'UPDATE') {
+          const r = mapReaction(payload.new)
+          return prev.map((x) => (x.message_id === r.message_id && x.user_id === r.user_id ? r : x))
+        }
+        const old = mapReaction(payload.old)
+        return prev.filter((x) => !(x.message_id === old.message_id && x.user_id === old.user_id))
+      })
+    }
+
+    const onProfile = (row: any) => {
+      const p = mapProfile(row)
+      if (!p) return
+      setChats((prev) =>
+        prev.map((c) => ({
+          ...c,
+          members: c.members.map((m) => (m.user_id === p.id ? { ...m, profile: p } : m)),
+        })),
+      )
+    }
+
+    /* --- her tablo grubu ayrı kanalda: biri hata verse diğerleri çalışmaya devam eder --- */
+    let channels: RealtimeChannel[] = []
+    let presence: RealtimeChannel | null = null
+    let disposed = false
+    let retryTimer: number | null = null
+    let retryAttempt = 0
+
+    const teardown = () => {
+      for (const ch of channels) supabase.removeChannel(ch)
+      channels = []
+    }
+
+    const setup = () => {
+      if (disposed) return
+      teardown()
+
+      const msgCh = supabase
+        .channel('zap-mesajlar')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (p: any) => onNewMessage(p.new))
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (p: any) => onUpdatedMessage(p.new))
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (p: any) => onDeletedMessage(p.old))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, onReaction)
+
+      const convCh = supabase
+        .channel('zap-sohbetler')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, () => scheduleReload())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => scheduleReload())
+
+      const profCh = supabase
+        .channel('zap-profiller')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (p: any) => onProfile(p.new))
+
+      const onStatus = (st: string) => {
+        if (st !== 'CHANNEL_ERROR' && st !== 'TIMED_OUT') return
+        // üstel geri çekilme: 2, 4, 8, 16, 30 sn (en fazla 6 deneme)
+        if (retryAttempt >= 6) return
+        if (retryTimer) return
+        const delay = Math.min(30000, 1000 * 2 ** (retryAttempt + 1))
+        retryAttempt += 1
+        retryTimer = window.setTimeout(() => {
+          retryTimer = null
+          if (disposed) return
+          setup()
+          void loadAll()
+        }, delay)
+      }
+
+      msgCh.subscribe(onStatus)
+      convCh.subscribe(onStatus)
+      profCh.subscribe(onStatus)
+      channels = [msgCh, convCh, profCh]
+
+      /* presence */
+      const pres = supabase.channel('zapmesaj-presence', { config: { presence: { key: meId } } })
+      pres
+        .on('presence', { event: 'sync' }, () => {
+          setOnlineUsers(new Set(Object.keys(pres.presenceState())))
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await pres.track({ user_id: meId, online_at: new Date().toISOString() })
+          }
+        })
+      presence = pres
+    }
+
+    setup()
+
+    /* --- güvenlik ağı: realtime gecikirse bile mesajlar en geç 2.5 sn'de düşsün --- */
+    let tick = 0
+    const poller = window.setInterval(() => {
+      if (document.hidden) return
+      tick += 1
+      if (activeRef.current) void fetchChatMessages(activeRef.current)
+      if (tick % 4 === 0) loadAll()          // ~10 sn'de bir sohbet listesi
+    }, 2500)
+
+    const onVisible = () => {
+      if (document.hidden) return
+      if (activeRef.current) void fetchChatMessages(activeRef.current)
+      loadAll()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+
+    const heartbeat = window.setInterval(() => {
       supabase.rpc('touch_last_seen').then(() => {})
     }, 45000)
     supabase.rpc('touch_last_seen').then(() => {})
 
     return () => {
+      disposed = true
       if (reloadTimer) window.clearTimeout(reloadTimer)
-      clearInterval(heartbeat)
-      supabase.removeChannel(channel)
-      supabase.removeChannel(presence)
+      if (retryTimer) window.clearTimeout(retryTimer)
+      window.clearInterval(poller)
+      window.clearInterval(heartbeat)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      teardown()
+      if (presence) supabase.removeChannel(presence)
     }
   }, [meId, loadAll])
 
@@ -288,31 +374,6 @@ export function useMessenger() {
       typingChannel.current = null
     }
   }, [activeChatId, meId])
-
-  /* -------- realtime yedeği: açık sohbeti periyodik olarak tazele -------- */
-  useEffect(() => {
-    if (!meId || !activeChatId) return
-    const tick = async () => {
-      if (document.hidden) return
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', activeChatId)
-        .order('created_at', { ascending: true })
-        .limit(300)
-      if (!data) return
-      const fresh = data.map(mapMessage)
-      setMessages((prev) => {
-        const cur = prev[activeChatId] || []
-        const sameLen = cur.length === fresh.length
-        const sameLast = cur.length > 0 && fresh.length > 0 && cur[cur.length - 1].id === fresh[fresh.length - 1].id
-        if (sameLen && sameLast) return prev
-        return { ...prev, [activeChatId]: fresh }
-      })
-    }
-    const id = window.setInterval(tick, 20000)
-    return () => window.clearInterval(id)
-  }, [meId, activeChatId])
 
   const sendTyping = useCallback(
     (name: string) => {
