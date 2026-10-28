@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
-import { MessageCircle, ShieldCheck, Users, Wifi, Zap } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { CircleDot, MessageCircle, Phone, ShieldCheck, Users, Video, Wifi, Zap } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import { useMessenger } from './hooks/useMessenger'
+import { useStatuses } from './hooks/useStatuses'
+import { useCalls } from './hooks/useCalls'
+import { useAdmin } from './hooks/useAdmin'
 import { AuthScreen } from './components/AuthScreen'
 import { Sidebar } from './components/Sidebar'
 import { ChatWindow } from './components/ChatWindow'
@@ -9,15 +12,25 @@ import { NewChatModal } from './components/NewChatModal'
 import { NewGroupModal } from './components/NewGroupModal'
 import { ProfileModal } from './components/ProfileModal'
 import { ChatInfoModal } from './components/ChatInfoModal'
+import { StatusPanel } from './components/StatusPanel'
+import { CallOverlay } from './components/CallOverlay'
+import { AdminPanel } from './components/AdminPanel'
+import { otherMember } from './lib/utils'
 
 export default function App() {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   const m = useMessenger()
+  const s = useStatuses()
+  const c = useCalls()
+  const a = useAdmin()
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('zap-theme') as 'light' | 'dark') || 'light')
   const [newChat, setNewChat] = useState(false)
   const [newGroup, setNewGroup] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,6 +42,33 @@ export default function App() {
     setToast(msg)
     window.setTimeout(() => setToast(null), 3200)
   }
+
+  const activeChat = m.chats.find((x) => x.id === m.activeChatId) || null
+
+  const callPeer = useMemo(() => {
+    if (!activeChat || !m.meId) return null
+    const other = otherMember(activeChat, m.meId)
+    if (!other) return null
+    return {
+      id: other.user_id,
+      name: other.profile?.full_name || other.profile?.username || 'Kullanıcı',
+      avatar_url: other.profile?.avatar_url ?? null,
+    }
+  }, [activeChat, m.meId])
+
+  const peerCallLogs = useMemo(() => {
+    if (!callPeer) return []
+    return c.logs.filter(
+      (l) =>
+        (l.caller_id === callPeer.id && l.callee_id === m.meId) ||
+        (l.callee_id === callPeer.id && l.caller_id === m.meId),
+    )
+  }, [c.logs, callPeer, m.meId])
+
+  /* gelen çağrı bildirimi */
+  useEffect(() => {
+    if (c.incoming) showToast(`📞 ${c.incoming.fromName} arıyor…`)
+  }, [c.incoming])
 
   if (loading) {
     return (
@@ -43,7 +83,17 @@ export default function App() {
 
   if (!user) return <AuthScreen />
 
-  const activeChat = m.chats.find((c) => c.id === m.activeChatId) || null
+  const startCall = (kind: 'audio' | 'video') => {
+    if (activeChat?.type === 'group') {
+      showToast('Sesli/görüntülü arama şimdilik birebir sohbetlerde 👤')
+      return
+    }
+    if (!callPeer) {
+      showToast('Arama için birebir sohbet seç 👤')
+      return
+    }
+    void c.startCall(callPeer, kind, activeChat?.id ?? null)
+  }
 
   return (
     <div className={`app ${m.activeChatId ? 'chat-open' : ''}`}>
@@ -54,6 +104,9 @@ export default function App() {
         onProfile={() => setProfileOpen(true)}
         theme={theme}
         onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onStatus={() => setStatusOpen(true)}
+        onAdmin={() => setAdminOpen(true)}
+        statusCount={s.groups.filter((g) => !g.isMine).length}
       />
 
       {m.activeChatId ? (
@@ -63,6 +116,7 @@ export default function App() {
           onBack={() => m.selectChat(null)}
           onOpenInfo={() => setInfoOpen(true)}
           onToast={showToast}
+          onCall={startCall}
         />
       ) : (
         <main className="chat-area empty">
@@ -71,9 +125,7 @@ export default function App() {
               <MessageCircle size={46} />
             </div>
             <h1>ZapMesaj</h1>
-            <p className="muted">
-              Sohbet etmek için soldan bir sohbet seç ya da yeni bir sohbet başlat.
-            </p>
+            <p className="muted">Sohbet etmek için soldan bir sohbet seç ya da yeni bir sohbet başlat.</p>
             <div className="feature-grid">
               <div>
                 <Zap size={18} /> <span>Anlık mesaj</span>
@@ -82,16 +134,32 @@ export default function App() {
                 <Users size={18} /> <span>Gruplar</span>
               </div>
               <div>
-                <ShieldCheck size={18} /> <span>Güvenli altyapı</span>
+                <CircleDot size={18} /> <span>Durumlar</span>
+              </div>
+              <div>
+                <Phone size={18} /> <span>Sesli arama</span>
+              </div>
+              <div>
+                <Video size={18} /> <span>Görüntülü arama</span>
               </div>
               <div>
                 <Wifi size={18} /> <span>Gerçek zamanlı</span>
               </div>
+              {profile?.is_admin && (
+                <div>
+                  <ShieldCheck size={18} /> <span>Yönetim paneli</span>
+                </div>
+              )}
             </div>
-            <button className="primary-btn" onClick={() => setNewChat(true)}>
-              Yeni sohbet başlat
-            </button>
-            <p className="tiny muted">Durum özelliği yok — sadece gerçek sohbetler.</p>
+            <div className="empty-cta">
+              <button className="primary-btn" onClick={() => setNewChat(true)}>
+                Yeni sohbet başlat
+              </button>
+              <button className="ghost-btn" onClick={() => setStatusOpen(true)}>
+                <CircleDot size={16} /> Durum ekle
+              </button>
+            </div>
+            <p className="tiny muted">Durumlar 24 saat sonra kaybolur · Aramalar uçtan uca WebRTC ile yapılır.</p>
           </div>
         </main>
       )}
@@ -106,7 +174,15 @@ export default function App() {
         m={m}
         onToast={showToast}
         onLeft={() => m.selectChat(null)}
+        callLogs={peerCallLogs}
+        onCall={(kind) => {
+          setInfoOpen(false)
+          startCall(kind)
+        }}
       />
+      {statusOpen && m.meId && <StatusPanel s={s} meId={m.meId} onClose={() => setStatusOpen(false)} />}
+      <AdminPanel a={a} open={adminOpen} onClose={() => setAdminOpen(false)} onToast={showToast} />
+      <CallOverlay c={c} />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

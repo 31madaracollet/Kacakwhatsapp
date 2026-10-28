@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { LogOut, MessageSquarePlus, Moon, Search, Sun, UserCircle2, Users } from 'lucide-react'
+import { CircleDot, LogOut, MessageSquarePlus, Moon, Search, ShieldCheck, Sun, UserCircle2, Users } from 'lucide-react'
 import type { Messenger } from '../hooks/useMessenger'
 import { useAuth } from '../hooks/useAuth'
 import { Avatar } from './Avatar'
@@ -12,11 +12,14 @@ interface Props {
   onProfile: () => void
   theme: 'light' | 'dark'
   onToggleTheme: () => void
+  onStatus?: () => void
+  onAdmin?: () => void
+  statusCount?: number
 }
 
 type Filter = 'all' | 'unread' | 'groups'
 
-export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTheme }: Props) {
+export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTheme, onStatus, onAdmin, statusCount = 0 }: Props) {
   const { profile, signOut } = useAuth()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -67,6 +70,17 @@ export function Sidebar({ m, onNewChat, onNewGroup, onProfile, theme, onToggleTh
         </div>
 
         <div className="sidebar-actions">
+          {onStatus && (
+            <button className="icon-btn light status-btn" title="Durum" onClick={onStatus}>
+              <CircleDot size={19} />
+              {statusCount > 0 && <i className="dot-beat">{statusCount > 9 ? '9+' : statusCount}</i>}
+            </button>
+          )}
+          {profile?.is_admin && onAdmin && (
+            <button className="icon-btn light" title="Yönetim paneli" onClick={onAdmin}>
+              <ShieldCheck size={19} />
+            </button>
+          )}
           <button className="icon-btn light" title="Yeni grup" onClick={onNewGroup}>
             <Users size={19} />
           </button>

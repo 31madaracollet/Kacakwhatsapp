@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { mapChat, mapMember, mapMessage, mapProfile, mapReaction } from '../lib/map'
 import type { Chat, Member, Message, Reaction } from '../lib/types'
 import { useAuth } from './useAuth'
 
@@ -64,12 +65,12 @@ export function useMessenger() {
     setLoading(true)
     try {
       const { data: memberships, error: mErr } = await supabase
-        .from('chat_members')
-        .select('chat_id')
+        .from('conversation_members')
+        .select('conversation_id')
         .eq('user_id', meId)
       if (mErr) throw mErr
 
-      const ids = (memberships || []).map((m: any) => m.chat_id)
+      const ids = (memberships || []).map((m: any) => m.conversation_id)
       if (ids.length === 0) {
         setChats([])
         setMessages({})
@@ -78,12 +79,12 @@ export function useMessenger() {
       }
 
       const [{ data: chatRows, error: cErr }, { data: memberRows }, { data: msgRows }] = await Promise.all([
-        supabase.from('chats').select('*').in('id', ids),
-        supabase.from('chat_members').select('*, profile:profiles(*)').in('chat_id', ids),
+        supabase.from('conversations').select('*').in('id', ids),
+        supabase.from('conversation_members').select('*, profile:profiles(*)').in('conversation_id', ids),
         supabase
           .from('messages')
           .select('*')
-          .in('chat_id', ids)
+          .in('conversation_id', ids)
           .order('created_at', { ascending: false })
           .limit(1200),
       ])
@@ -91,43 +92,31 @@ export function useMessenger() {
 
       const msgIds = (msgRows || []).slice(0, 400).map((m: any) => m.id)
       const { data: reactionRows } = msgIds.length
-        ? await supabase.from('reactions').select('*').in('message_id', msgIds)
-        : { data: [] as Reaction[] }
+        ? await supabase.from('message_reactions').select('*').in('message_id', msgIds)
+        : { data: [] as any[] }
 
       const memberMap = new Map<string, Member[]>()
-      for (const m of (memberRows || []) as any[]) {
-        const list = memberMap.get(m.chat_id) || []
-        list.push({
-          chat_id: m.chat_id,
-          user_id: m.user_id,
-          role: m.role,
-          last_read_at: m.last_read_at,
-          is_muted: m.is_muted,
-          joined_at: m.joined_at,
-          profile: m.profile,
-        })
-        memberMap.set(m.chat_id, list)
+      for (const row of (memberRows || []) as any[]) {
+        const list = memberMap.get(row.conversation_id) || []
+        list.push(mapMember(row))
+        memberMap.set(row.conversation_id, list)
       }
 
       const msgMap: Record<string, Message[]> = {}
-      for (const m of (msgRows || []) as Message[]) {
-        if (!msgMap[m.chat_id]) msgMap[m.chat_id] = []
-        msgMap[m.chat_id].push(m)
+      for (const row of (msgRows || []) as any[]) {
+        const msg = mapMessage(row)
+        if (!msgMap[msg.chat_id]) msgMap[msg.chat_id] = []
+        msgMap[msg.chat_id].push(msg)
       }
       for (const key of Object.keys(msgMap)) msgMap[key].reverse()
 
-      const built: Chat[] = ((chatRows || []) as any[]).map((c) => {
-        const list = msgMap[c.id] || []
-        return {
-          ...c,
-          members: memberMap.get(c.id) || [],
-          last_message_at: list.length ? list[list.length - 1].created_at : c.created_at,
-        }
-      })
+      const built: Chat[] = ((chatRows || []) as any[]).map((c) =>
+        mapChat(c, memberMap.get(c.id) || []),
+      )
 
       setChats(built)
       setMessages(msgMap)
-      setReactions((reactionRows || []) as Reaction[])
+      setReactions(((reactionRows || []) as any[]).map(mapReaction))
     } catch (e: any) {
       setError(e.message || 'Sohbetler yüklenemedi')
     } finally {
@@ -155,7 +144,7 @@ export function useMessenger() {
     const channel = supabase
       .channel('zapmesaj-db')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const msg = payload.new as Message
+        const msg = mapMessage(payload.new)
         const known = chatsRef.current.some((c) => c.id === msg.chat_id)
         if (!known) {
           loadAll()
@@ -163,15 +152,14 @@ export function useMessenger() {
         }
         setMessages((prev) => {
           if (!prev[msg.chat_id]) {
-            // sohbetin geçmişi henüz yüklenmemiş -> tamamını getir
             supabase
               .from('messages')
               .select('*')
-              .eq('chat_id', msg.chat_id)
+              .eq('conversation_id', msg.chat_id)
               .order('created_at', { ascending: true })
               .limit(300)
               .then(({ data }) => {
-                if (data) setMessages((cur) => ({ ...cur, [msg.chat_id]: data as Message[] }))
+                if (data) setMessages((cur) => ({ ...cur, [msg.chat_id]: data.map(mapMessage) }))
               })
             return prev
           }
@@ -191,48 +179,51 @@ export function useMessenger() {
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-        const msg = payload.new as Message
+        const msg = mapMessage(payload.new)
         setMessages((prev) => {
           const list = prev[msg.chat_id]
           if (!list) return prev
-          return { ...prev, [msg.chat_id]: list.map((m) => (m.id === msg.id ? { ...m, ...msg } : m)) }
+          return { ...prev, [msg.chat_id]: list.map((m) => (m.id === msg.id ? msg : m)) }
         })
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-        const old = payload.old as Message
+        const old = payload.old as any
+        const chatId = old.conversation_id
+        if (!chatId) return
         setMessages((prev) => {
-          const list = prev[old.chat_id]
+          const list = prev[chatId]
           if (!list) return prev
-          return { ...prev, [old.chat_id]: list.filter((m) => m.id !== old.id) }
+          return { ...prev, [chatId]: list.filter((m) => m.id !== old.id) }
         })
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, (payload) => {
         setReactions((prev) => {
           if (payload.eventType === 'INSERT') {
-            const r = payload.new as Reaction
+            const r = mapReaction(payload.new)
             if (prev.some((x) => x.message_id === r.message_id && x.user_id === r.user_id)) return prev
             return [...prev, r]
           }
           if (payload.eventType === 'UPDATE') {
-            const r = payload.new as Reaction
+            const r = mapReaction(payload.new)
             return prev.map((x) => (x.message_id === r.message_id && x.user_id === r.user_id ? r : x))
           }
-          const old = payload.old as Reaction
+          const old = mapReaction(payload.old)
           return prev.filter((x) => !(x.message_id === old.message_id && x.user_id === old.user_id))
         })
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_members' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, () => {
         scheduleReload()
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
         scheduleReload()
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-        const p = payload.new as any
+        const p = mapProfile(payload.new)
+        if (!p) return
         setChats((prev) =>
           prev.map((c) => ({
             ...c,
-            members: c.members.map((m) => (m.user_id === p.id ? { ...m, profile: { ...(m.profile as any), ...p } } : m)),
+            members: c.members.map((m) => (m.user_id === p.id ? { ...m, profile: p } : m)),
           })),
         )
       })
@@ -258,7 +249,6 @@ export function useMessenger() {
     return () => {
       if (reloadTimer) window.clearTimeout(reloadTimer)
       clearInterval(heartbeat)
-      supabase.rpc('touch_last_seen').then(() => {})
       supabase.removeChannel(channel)
       supabase.removeChannel(presence)
     }
@@ -299,16 +289,17 @@ export function useMessenger() {
       const { data } = await supabase
         .from('messages')
         .select('*')
-        .eq('chat_id', activeChatId)
+        .eq('conversation_id', activeChatId)
         .order('created_at', { ascending: true })
         .limit(300)
       if (!data) return
+      const fresh = data.map(mapMessage)
       setMessages((prev) => {
         const cur = prev[activeChatId] || []
-        const sameLen = cur.length === data.length
-        const sameLast = cur.length > 0 && data.length > 0 && cur[cur.length - 1].id === data[data.length - 1].id
+        const sameLen = cur.length === fresh.length
+        const sameLast = cur.length > 0 && fresh.length > 0 && cur[cur.length - 1].id === fresh[fresh.length - 1].id
         if (sameLen && sameLast) return prev
-        return { ...prev, [activeChatId]: data as Message[] }
+        return { ...prev, [activeChatId]: fresh }
       })
     }
     const id = window.setInterval(tick, 20000)
@@ -344,7 +335,7 @@ export function useMessenger() {
         ),
       )
       try {
-        await supabase.rpc('mark_chat_read', { p_chat: chatId })
+        await supabase.rpc('mark_read', { conv: chatId })
       } finally {
         setTimeout(() => pendingRead.current.delete(chatId), 1200)
       }
@@ -361,11 +352,11 @@ export function useMessenger() {
           supabase
             .from('messages')
             .select('*')
-            .eq('chat_id', chatId)
+            .eq('conversation_id', chatId)
             .order('created_at', { ascending: true })
             .limit(300)
             .then(({ data }) => {
-              if (data) setMessages((prev) => ({ ...prev, [chatId]: data as Message[] }))
+              if (data) setMessages((prev) => ({ ...prev, [chatId]: data.map(mapMessage) }))
             })
         }
       }
@@ -376,16 +367,23 @@ export function useMessenger() {
   const sendMessage = useCallback(
     async (input: NewMessageInput) => {
       if (!meId) return
+      const media_meta =
+        input.media_name || input.media_size || input.media_duration || input.media_thumb
+          ? {
+              name: input.media_name ?? null,
+              size: input.media_size ?? null,
+              duration: input.media_duration ?? null,
+              thumb: input.media_thumb ?? null,
+            }
+          : null
+
       const { error } = await supabase.from('messages').insert({
-        chat_id: input.chatId,
+        conversation_id: input.chatId,
         sender_id: meId,
-        body: input.body?.trim() || null,
+        content: input.body?.trim() || null,
         type: input.type || 'text',
         media_url: input.media_url || null,
-        media_name: input.media_name || null,
-        media_size: input.media_size ?? null,
-        media_duration: input.media_duration ?? null,
-        media_thumb: input.media_thumb || null,
+        media_meta,
         reply_to: input.reply_to || null,
       })
       if (error) throw new Error(error.message)
@@ -394,19 +392,28 @@ export function useMessenger() {
     [meId, markRead],
   )
 
-  const deleteMessage = useCallback(async (msg: Message) => {
-    await supabase.from('reactions').delete().eq('message_id', msg.id)
-    const { error } = await supabase
-      .from('messages')
-      .update({ deleted_at: new Date().toISOString(), body: null, media_url: null })
-      .eq('id', msg.id)
-    if (error) throw new Error(error.message)
-  }, [])
+  const deleteMessage = useCallback(
+    async (msg: Message) => {
+      await supabase.from('message_reactions').delete().eq('message_id', msg.id)
+      if (msg.sender_id === meId) {
+        const { error } = await supabase
+          .from('messages')
+          .update({ deleted_at: new Date().toISOString(), content: null, media_url: null })
+          .eq('id', msg.id)
+        if (error) throw new Error(error.message)
+      } else {
+        // başkasının mesajı: yönetici yetkisi gerekir
+        const { error } = await supabase.rpc('admin_delete_message', { mid: msg.id })
+        if (error) throw new Error('Bu mesajı silme yetkin yok')
+      }
+    },
+    [meId],
+  )
 
   const editMessage = useCallback(async (msg: Message, body: string) => {
     const { error } = await supabase
       .from('messages')
-      .update({ body, edited_at: new Date().toISOString() })
+      .update({ content: body, edited_at: new Date().toISOString() })
       .eq('id', msg.id)
     if (error) throw new Error(error.message)
   }, [])
@@ -416,30 +423,33 @@ export function useMessenger() {
       if (!meId) return
       const existing = reactions.find((r) => r.message_id === messageId && r.user_id === meId)
       if (existing?.emoji === emoji) {
-        await supabase.from('reactions').delete().eq('message_id', messageId).eq('user_id', meId)
+        await supabase.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', meId)
       } else if (existing) {
-        await supabase.from('reactions').update({ emoji }).eq('message_id', messageId).eq('user_id', meId)
+        await supabase.from('message_reactions').update({ emoji }).eq('message_id', messageId).eq('user_id', meId)
       } else {
-        await supabase.from('reactions').insert({ message_id: messageId, user_id: meId, emoji })
+        await supabase.from('message_reactions').insert({ message_id: messageId, user_id: meId, emoji })
       }
     },
     [meId, reactions],
   )
 
-  const startDirectChat = useCallback(async (otherId: string) => {
-    const { data, error } = await supabase.rpc('start_direct_chat', { p_other: otherId })
-    if (error) throw new Error(error.message)
-    await loadAll()
-    setActiveChatId(data as string)
-    return data as string
-  }, [loadAll])
+  const startDirectChat = useCallback(
+    async (otherId: string) => {
+      const { data, error } = await supabase.rpc('start_direct', { other: otherId })
+      if (error) throw new Error(error.message)
+      await loadAll()
+      setActiveChatId(data as string)
+      return data as string
+    },
+    [loadAll],
+  )
 
   const createGroup = useCallback(
     async (name: string, memberIds: string[], avatar: string | null) => {
       const { data, error } = await supabase.rpc('create_group', {
-        p_name: name,
-        p_member_ids: memberIds,
-        p_avatar: avatar,
+        gname: name,
+        member_ids: memberIds,
+        gdesc: avatar ? `avatar:${avatar}` : null,
       })
       if (error) throw new Error(error.message)
       await loadAll()
@@ -451,7 +461,7 @@ export function useMessenger() {
 
   const addMembers = useCallback(
     async (chatId: string, memberIds: string[]) => {
-      const { error } = await supabase.rpc('add_group_members', { p_chat: chatId, p_member_ids: memberIds })
+      const { error } = await supabase.rpc('add_members', { conv: chatId, member_ids: memberIds })
       if (error) throw new Error(error.message)
       await loadAll()
     },
@@ -460,7 +470,7 @@ export function useMessenger() {
 
   const removeMember = useCallback(
     async (chatId: string, userId: string) => {
-      const { error } = await supabase.rpc('remove_member', { p_chat: chatId, p_user: userId })
+      const { error } = await supabase.rpc('remove_member', { conv: chatId, member: userId })
       if (error) throw new Error(error.message)
       await loadAll()
     },
@@ -469,7 +479,7 @@ export function useMessenger() {
 
   const leaveChat = useCallback(
     async (chatId: string) => {
-      const { error } = await supabase.rpc('leave_chat', { p_chat: chatId })
+      const { error } = await supabase.rpc('leave_conversation', { conv: chatId })
       if (error) throw new Error(error.message)
       setActiveChatId(null)
       await loadAll()
@@ -479,7 +489,7 @@ export function useMessenger() {
 
   const updateChat = useCallback(
     async (chatId: string, patch: Partial<Pick<Chat, 'name' | 'avatar_url' | 'description'>>) => {
-      const { error } = await supabase.from('chats').update(patch).eq('id', chatId)
+      const { error } = await supabase.from('conversations').update(patch).eq('id', chatId)
       if (error) throw new Error(error.message)
       await loadAll()
     },
@@ -487,16 +497,40 @@ export function useMessenger() {
   )
 
   const searchUsers = useCallback(async (query: string) => {
-    let q = supabase.from('profiles').select('*').order('full_name').limit(40)
+    let q = supabase.from('profiles').select('*').order('display_name').limit(40)
     const safe = query.trim().replace(/[%,()]/g, ' ').trim()
     if (safe) {
       const term = `%${safe}%`
-      q = q.or(`full_name.ilike.${term},username.ilike.${term}`)
+      q = q.or(`display_name.ilike.${term},username.ilike.${term}`)
     }
     const { data, error } = await q
     if (error) throw new Error(error.message)
-    return (data || []) as any[]
+    return ((data || []) as any[]).map((p) => mapProfile(p)!)
   }, [])
+
+  /** Tüm sohbetlerde mesaj arama */
+  const searchMessages = useCallback(
+    async (term: string) => {
+      const q = term.trim()
+      if (!q || q.length < 2) return [] as { message: Message; chat: Chat | null }[]
+      const ids = chatsRef.current.map((c) => c.id)
+      if (!ids.length) return []
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', ids)
+        .ilike('content', `%${q.replace(/[%_]/g, ' ')}%`)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(40)
+      if (error) throw new Error(error.message)
+      return ((data || []) as any[]).map((row) => {
+        const message = mapMessage(row)
+        return { message, chat: chatsRef.current.find((c) => c.id === message.chat_id) || null }
+      })
+    },
+    [],
+  )
 
   const totalUnread = useMemo(() => {
     if (!meId) return 0
@@ -534,6 +568,7 @@ export function useMessenger() {
     leaveChat,
     updateChat,
     searchUsers,
+    searchMessages,
     markRead,
     sendTyping,
     reload: loadAll,

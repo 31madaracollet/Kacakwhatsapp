@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase, uploadAvatar } from '../lib/supabase'
+import { mapProfile } from '../lib/map'
 import type { Profile } from '../lib/types'
 
 interface AuthContextValue {
@@ -25,8 +26,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-    if (data) setProfile(data as Profile)
-    return data as Profile | null
+    const mapped = mapProfile(data) ?? null
+    if (mapped) setProfile(mapped)
+    return mapped
   }, [])
 
   useEffect(() => {
@@ -98,14 +100,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const saveProfile: AuthContextValue['saveProfile'] = async (patch) => {
     if (!session?.user) return
+    // uygulama tipi (full_name) → canlı şema (display_name)
+    const row: Record<string, any> = { ...patch }
+    if ('full_name' in row) {
+      row.display_name = row.full_name
+      delete row.full_name
+    }
     const { data, error } = await supabase
       .from('profiles')
-      .update(patch)
+      .update(row)
       .eq('id', session.user.id)
       .select()
       .single()
     if (error) throw new Error(error.message)
-    setProfile(data as Profile)
+    setProfile(mapProfile(data) ?? null)
   }
 
   const changeAvatar = async (file: File) => {
