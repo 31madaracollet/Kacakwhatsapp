@@ -1,14 +1,11 @@
 import React, { useState } from 'react'
-import { Lock, Mail, MessageCircle, ShieldCheck, User, Zap } from 'lucide-react'
+import { Lock, Mail, MessageCircle, Phone, ShieldCheck, User, Zap } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
 export function AuthScreen() {
-  const { signIn, signUp } = useAuth()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [username, setUsername] = useState('')
-  const [fullName, setFullName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -19,15 +16,7 @@ export function AuthScreen() {
     setInfo(null)
     setBusy(true)
     try {
-      if (mode === 'login') {
-        await signIn(email, password)
-      } else {
-        const { needsConfirm } = await signUp({ email, password, username, fullName })
-        if (needsConfirm) {
-          setInfo('Sana bir onay e-postası gönderdik. E-postanı onaylayıp giriş yapabilirsin.')
-          setMode('login')
-        }
-      }
+      await signIn(email, password)
     } catch (err: any) {
       setError(err.message || 'Bir şeyler ters gitti')
     } finally {
@@ -59,54 +48,22 @@ export function AuthScreen() {
             <User size={18} /> Grup sohbetleri, okundu bilgisi, yazıyor göstergesi
           </li>
           <li>
-            <ShieldCheck size={18} /> Supabase altyapısı, güvenli hesaplar
+            <Phone size={18} /> Sesli ve görüntülü arama (WebRTC)
+          </li>
+          <li>
+            <ShieldCheck size={18} /> Supabase altyapısı, güvenli hesaplar · hesapları yönetici açar
           </li>
         </ul>
 
-        <p className="hero-note">Durum özelliği yok — sadece sohbet. Tam istediğin gibi.</p>
+        <p className="hero-note">24 saatlik durumlar · sesli ve görüntülü arama · yönetim paneli</p>
       </div>
 
       <div className="auth-panel">
         <div className="auth-card">
-          <h2>{mode === 'login' ? 'Tekrar hoş geldin' : 'Hesap oluştur'}</h2>
-          <p className="muted">
-            {mode === 'login' ? 'Devam etmek için giriş yap' : 'Saniyeler içinde aramıza katıl'}
-          </p>
-
-          <div className="segmented">
-            <button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')} type="button">
-              Giriş yap
-            </button>
-            <button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')} type="button">
-              Kayıt ol
-            </button>
-          </div>
+          <h2>Tekrar hoş geldin</h2>
+          <p className="muted">Devam etmek için giriş yap</p>
 
           <form onSubmit={submit}>
-            {mode === 'register' && (
-              <>
-                <label className="field">
-                  <User size={16} />
-                  <input
-                    placeholder="Ad Soyad"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span className="at">@</span>
-                  <input
-                    placeholder="kullanici_adi"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    minLength={3}
-                  />
-                </label>
-              </>
-            )}
-
             <label className="field">
               <Mail size={16} />
               <input
@@ -128,7 +85,7 @@ export function AuthScreen() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                autoComplete="current-password"
               />
             </label>
 
@@ -136,32 +93,19 @@ export function AuthScreen() {
             {info && <div className="alert ok">{info}</div>}
 
             <button className="primary-btn" disabled={busy}>
-              {busy ? 'İşleniyor...' : mode === 'login' ? 'Giriş yap' : 'Hesabımı oluştur'}
+              {busy ? 'İşleniyor...' : 'Giriş yap'}
             </button>
           </form>
 
           <div className="demo-box">
-            <span>Hemen denemek ister misin?</span>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={busy}
-              onClick={async () => {
-                setError(null)
-                setInfo(null)
-                setBusy(true)
-                try {
-                  await signIn('demo@zapmesaj.app', 'ZapMesaj123')
-                } catch (err: any) {
-                  setError(err.message || 'Demo hesabına giriş yapılamadı')
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Demo hesabıyla gir
-            </button>
-            <p className="tiny muted">demo@zapmesaj.app · ZapMesaj123</p>
+            <span>Hesabın yok mu?</span>
+            <p className="tiny muted">
+              Hesap açma yetkisi yalnızca yöneticidedir. HappyProjects hesabınla giriş yapabilir ya da
+              yöneticiden hesap açmasını isteyebilirsin.
+            </p>
+            <a className="ghost-btn" href="https://happyprojects-delta.vercel.app" target="_blank" rel="noreferrer">
+              HappyProjects'e git
+            </a>
           </div>
 
           <p className="tiny muted center">

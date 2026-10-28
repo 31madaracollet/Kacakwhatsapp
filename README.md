@@ -51,16 +51,11 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 - Supabase projesi: `zapmesaj` (`szhpjbuuiltkqhhgmphm`)
 - Kaynak kod yedeği + SQL şeması: Google Drive → **ZapMesaj — Medya Deposu / exports**
 
-## Demo hesapları
+## Hesaplar
 
-| E-posta | Şifre |
-| --- | --- |
-| demo@zapmesaj.app | ZapMesaj123 |
-| ayse@zapmesaj.app | ZapMesaj123 |
-| mehmet@zapmesaj.app | ZapMesaj123 |
-
-Giriş ekranındaki **Demo hesabıyla gir** düğmesiyle tek tıkla deneyebilirsin.
-Ayrıca kendi hesabını "Kayıt ol" sekmesinden saniyeler içinde açabilirsin.
+- **Kendi kendine kayıt kapalıdır** (`disable_signup: true`). Hesabı yalnızca yönetici açar
+  (HappyProjects hub'ı → Yönetim → Kullanıcı ekle).
+- Mevcut yöneticiler: `akif`, `admin`.
 
 ## Özellikler
 
