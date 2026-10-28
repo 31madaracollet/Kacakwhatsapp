@@ -19,11 +19,28 @@ export function useStatuses() {
     try {
       // süre süzgecini sunucuya bırakıyoruz: RLS "expires_at > now()" ile süzüyor.
       // (cihaz saati ileri/geri olunca durumlar görünmez oluyordu)
-      const { data, error } = await supabase
+      // status_views tablosu statuses <-> profiles arasında ikinci bir (çoktan-çoğa)
+      // ilişki oluşturduğu için embed'i FOREIGN KEY adıyla netleştiriyoruz.
+      const ilk = await supabase
         .from('statuses')
-        .select('*, profile:profiles(*)')
+        .select('*, profile:profiles!statuses_user_id_fkey(*)')
         .order('created_at', { ascending: true })
-      if (error) throw error
+
+      let data: any[] | null = (ilk.data as any[]) || null
+
+      if (ilk.error) {
+        // embed bir sebeple reddedilirse profilleri ayrı çekip birleştir
+        const yedek = await supabase.from('statuses').select('*').order('created_at', { ascending: true })
+        if (yedek.error) throw yedek.error
+        const satirlar = (yedek.data || []) as any[]
+        const ids = Array.from(new Set(satirlar.map((r) => r.user_id))).filter(Boolean)
+        const profRes = ids.length
+          ? await supabase.from('profiles').select('*').in('id', ids)
+          : { data: [] as any[] }
+        const byId = new Map(((profRes.data || []) as any[]).map((p) => [p.id, p]))
+        data = satirlar.map((r) => ({ ...r, profile: byId.get(r.user_id) || null }))
+      }
+
       setStatuses(((data || []) as any[]).map(mapStatus))
     } finally {
       setLoading(false)
