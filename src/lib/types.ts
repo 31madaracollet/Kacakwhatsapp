@@ -10,6 +10,10 @@ export interface Profile {
   created_at?: string
   is_admin?: boolean
   is_banned?: boolean
+  /** kabul edilen hüküm ve koşullar sürümü (profiles.sozlesme_surumu) */
+  terms_version?: string | null
+  /** onayın verildiği an (profiles.sozlesme_tarihi) */
+  terms_accepted_at?: string | null
 }
 
 export interface Member {

@@ -138,6 +138,51 @@ export async function deleteMediaPaths(paths: string[], bucket = MEDIA_BUCKET): 
 }
 
 /**
+ * Karışık adres listesini (R2 + eski Supabase adresleri) depodan siler.
+ * Sunucudan gelen "şu dosyaları sil" listeleri için kullanılır; hata yutulur,
+ * çünkü zaten silinmiş bir dosya yüzünden temizlik durmamalı.
+ */
+export async function deleteMediaUrls(urls: (string | null | undefined)[], bucket = MEDIA_BUCKET): Promise<number> {
+  const r2Keys: string[] = []
+  const sbPaths: string[] = []
+
+  for (const url of urls) {
+    if (!url) continue
+    const r2Key = r2KeyFromUrl(url)
+    if (r2Key) {
+      r2Keys.push(r2Key)
+      continue
+    }
+    const sbPath = supabasePathFromUrl(url, bucket)
+    if (sbPath) sbPaths.push(sbPath)
+  }
+
+  let silinen = 0
+
+  for (let i = 0; i < r2Keys.length; i += 50) {
+    try {
+      const { error } = await supabase.functions.invoke('r2', {
+        body: { action: 'delete', keys: r2Keys.slice(i, i + 50) },
+      })
+      if (!error) silinen += Math.min(50, r2Keys.length - i)
+    } catch {
+      /* sıradaki partla devam */
+    }
+  }
+
+  for (let i = 0; i < sbPaths.length; i += 20) {
+    try {
+      const { error } = await supabase.storage.from(bucket).remove(sbPaths.slice(i, i + 20))
+      if (!error) silinen += Math.min(20, sbPaths.length - i)
+    } catch {
+      /* sıradaki partla devam */
+    }
+  }
+
+  return silinen
+}
+
+/**
  * URL'den dosyayı siler (mesaj/durum silinince çağrılır).
  * Hem R2 hem Supabase adreslerini tanır.
  */
