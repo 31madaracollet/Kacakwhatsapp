@@ -1,10 +1,10 @@
 # ZapMesaj 💬
 
-WhatsApp benzeri, gerçek zamanlı mesajlaşma uygulaması. **Durum (story) özelliği yok** — sadece sohbet.
+WhatsApp benzeri, gerçek zamanlı mesajlaşma uygulaması: sohbet, gruplar, medya, 24 saatlik durumlar, sesli/görüntülü arama ve yönetim paneli.
 
 ## Özellikler
 
-- 🔐 E-posta/şifre ile hesap oluşturma ve giriş (Supabase Auth)
+- 🔐 Kendi sitesinden e-posta/şifre ile **hesap açma** ve giriş (Supabase Auth)
 - 💬 Birebir sohbetler + 👥 grup sohbetleri (yönetici, üye ekle/çıkar, gruptan ayrıl)
 - 📷 Fotoğraf, 🎬 video, 🎤 ses kaydı ve 📎 dosya gönderimi (Supabase Storage, 50 MB'a kadar)
 - ⚡ Gerçek zamanlı mesajlar, "yazıyor..." göstergesi, çevrimiçi/son görülme
@@ -53,8 +53,10 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 
 ## Hesaplar
 
-- **Kendi kendine kayıt kapalıdır** (`disable_signup: true`). Hesabı yalnızca yönetici açar
-  (HappyProjects hub'ı → Yönetim → Kullanıcı ekle).
+- Hesap açma **ZapMesaj'ın kendi giriş ekranından** yapılır ("Hesap aç" sekmesi).
+  HappyProjects hub'ı ve SSO devri kaldırıldı; uygulama kendi başına çalışır.
+- Yeni kayıtta kullanıcı adı benzersizleştirilir (`benzersiz_kullanici_adi`), profil satırı
+  `handle_new_user` trigger'ı ile otomatik oluşturulur.
 - Mevcut yöneticiler: `akif`, `admin`.
 
 ## Özellikler
@@ -68,6 +70,6 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 
 - Durum (story) 24 saat sonra otomatik olarak kaybolur (RLS `expires_at` filtresi).
 - Yöneticilik `profiles.is_admin` ile verilir; ilk yöneticiler `akif` ve `admin`.
-- Aramalar P2P WebRTC ile kurulur; yalnızca STUN sunucuları kullanılır (TURN yok).
+- Aramalar P2P WebRTC ile kurulur; STUN + açık TURN sunucuları kullanılır.
 - Medya dosyaları Supabase Storage (`media`, `avatars`) üzerinde tutulur; Drive klasörü
   yedek/arşiv amacıyla kullanılır.
