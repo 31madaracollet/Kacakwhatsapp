@@ -70,6 +70,11 @@ export default function App() {
     if (c.incoming) showToast(`📞 ${c.incoming.fromName} arıyor…`)
   }, [c.incoming])
 
+  /* arama hatası (sesli/görüntülü) kullanıcıya görünsün */
+  useEffect(() => {
+    if (c.error) showToast('Arama hatası: ' + c.error)
+  }, [c.error])
+
   if (loading) {
     return (
       <div className="boot">
@@ -165,7 +170,13 @@ export default function App() {
       )}
 
       <NewChatModal open={newChat} onClose={() => setNewChat(false)} m={m} onStarted={(id) => m.selectChat(id)} />
-      <NewGroupModal open={newGroup} onClose={() => setNewGroup(false)} m={m} onCreated={(id) => m.selectChat(id)} />
+      <NewGroupModal
+        open={newGroup}
+        onClose={() => setNewGroup(false)}
+        m={m}
+        onToast={showToast}
+        onCreated={(id) => m.selectChat(id)}
+      />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} onToast={showToast} />
       <ChatInfoModal
         open={infoOpen && !!activeChat}

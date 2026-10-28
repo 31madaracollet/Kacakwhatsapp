@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, LogOut, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search, ShieldCheck, UserMinus, UserPlus, Users, Video } from 'lucide-react'
+import { Camera, LogOut, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Plus, Search, ShieldCheck, UserMinus, UserPlus, Users, Video } from 'lucide-react'
 import type { Chat, CallLog } from '../lib/types'
 import type { Messenger } from '../hooks/useMessenger'
 import { Modal } from './Modal'
@@ -23,6 +23,8 @@ export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft, callLog
   const { user } = useAuth()
   const meId = user?.id || ''
   const [adding, setAdding] = useState(false)
+  const [toAdd, setToAdd] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<any[]>([])
   const [editingName, setEditingName] = useState(false)
@@ -33,6 +35,7 @@ export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft, callLog
     if (!open) {
       setAdding(false)
       setQuery('')
+      setToAdd([])
       setEditingName(false)
     } else if (chat) {
       setName(chat.name || '')
@@ -136,25 +139,47 @@ export function ChatInfoModal({ open, onClose, chat, m, onToast, onLeft, callLog
                   <Search size={15} />
                   <input autoFocus placeholder="Kişi ara..." value={query} onChange={(e) => setQuery(e.target.value)} />
                 </div>
-                {results.map((u) => (
+                {results.map((u: any) => {
+                  const secili = toAdd.includes(u.id)
+                  return (
+                    <button
+                      key={u.id}
+                      className={`user-row ${secili ? 'selected' : ''}`}
+                      onClick={() =>
+                        setToAdd((prev) => (prev.includes(u.id) ? prev.filter((x) => x !== u.id) : [...prev, u.id]))
+                      }
+                    >
+                      <Avatar name={u.full_name} src={u.avatar_url} size={36} seed={u.username} />
+                      <div>
+                        <strong>{u.full_name || u.username}</strong>
+                        <span className="muted tiny">@{u.username}</span>
+                      </div>
+                      <span className={`check ${secili ? 'on' : ''}`}>{secili && <Plus size={13} />}</span>
+                    </button>
+                  )
+                })}
+                {results.length === 0 && <p className="muted tiny center pad">Eklenebilecek kişi yok</p>}
+                {toAdd.length > 0 && (
                   <button
-                    key={u.id}
-                    className="user-row"
+                    className="primary-btn small"
+                    disabled={saving}
                     onClick={async () => {
-                      await m.addMembers(chat.id, [u.id])
-                      setResults((prev) => prev.filter((x) => x.id !== u.id))
-                      onToast(`${u.full_name} eklendi`)
+                      setSaving(true)
+                      try {
+                        await m.addMembers(chat.id, toAdd)
+                        onToast(`${toAdd.length} kişi gruba eklendi ✅`)
+                        setResults((prev) => prev.filter((x: any) => !toAdd.includes(x.id)))
+                        setToAdd([])
+                      } catch (e: any) {
+                        onToast('Eklenemedi: ' + (e.message || 'hata'))
+                      } finally {
+                        setSaving(false)
+                      }
                     }}
                   >
-                    <Avatar name={u.full_name} src={u.avatar_url} size={36} seed={u.username} />
-                    <div>
-                      <strong>{u.full_name}</strong>
-                      <span className="muted tiny">@{u.username}</span>
-                    </div>
-                    <UserPlus size={16} />
+                    <UserPlus size={15} /> {saving ? 'Ekleniyor...' : `${toAdd.length} kişiyi ekle`}
                   </button>
-                ))}
-                {results.length === 0 && <p className="muted tiny center pad">Eklenebilecek kişi yok</p>}
+                )}
               </div>
             )}
 

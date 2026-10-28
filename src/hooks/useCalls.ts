@@ -147,10 +147,30 @@ export function useCalls() {
   )
 
   const getMedia = useCallback(async (kind: CallKind) => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: kind === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
-    })
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Tarayıcı mikrofon/kameraya izin vermiyor (site https olmalı)')
+    }
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: kind === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+      })
+    } catch (e: any) {
+      const name = e?.name || ''
+      if (name === 'NotAllowedError' || name === 'SecurityError')
+        throw new Error(
+          kind === 'video'
+            ? 'Kamera/mikrofon izni verilmedi. Tarayıcı adres çubuğundan izin ver.'
+            : 'Mikrofon izni verilmedi. Tarayıcı adres çubuğundan izin ver.',
+        )
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
+        throw new Error(kind === 'video' ? 'Kamera veya mikrofon bulunamadı' : 'Mikrofon bulunamadı')
+      if (name === 'NotReadableError')
+        throw new Error('Mikrofon/kamera başka bir uygulama tarafından kullanılıyor')
+      throw new Error(e?.message || 'Mikrofon/kamera açılamadı')
+    }
+    // sesli aramada da yalnızca ses izi kalır
     localRef.current = stream
     setLocalStream(stream)
     return stream
