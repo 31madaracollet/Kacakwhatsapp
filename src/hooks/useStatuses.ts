@@ -39,8 +39,22 @@ export function useStatuses() {
     if (!meId) return
     void (async () => {
       try {
-        await supabase.rpc('purge_expired_statuses')
-        await supabase.rpc('purge_orphan_media')
+        // sunucu yalnızca dosya yollarını döndürür; silmeyi Storage API yapıyor
+        const [{ data: suresi }, { data: sahipsiz }] = await Promise.all([
+          supabase.rpc('purge_expired_statuses'),
+          supabase.rpc('purge_orphan_media'),
+        ])
+        const yollar = [...(Array.isArray(suresi) ? suresi : []), ...(Array.isArray(sahipsiz) ? sahipsiz : [])]
+          .filter((p): p is string => typeof p === 'string' && p.length > 0)
+        // yalnızca kendi yüklediğimiz dosyalar silinebilir (Storage RLS)
+        for (let i = 0; i < yollar.length; i += 50) {
+          const parca = yollar.slice(i, i + 50)
+          try {
+            await supabase.storage.from('media').remove(parca)
+          } catch {
+            /* yoksay */
+          }
+        }
         await load()
       } catch {
         /* yoksay */
