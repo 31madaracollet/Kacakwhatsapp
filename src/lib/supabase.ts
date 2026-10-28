@@ -89,6 +89,34 @@ function loadImage(file: Blob): Promise<HTMLImageElement> {
   })
 }
 
+/**
+ * Yüklenen bir dosyayı depodan (Storage) siler; böylece yer kaplamaz.
+ * URL'den yolu çıkarır. Sahibi olmadığımız dosyalarda yönetici RPC'sini dener.
+ */
+export async function deleteMediaByUrl(url?: string | null, bucket = MEDIA_BUCKET): Promise<boolean> {
+  if (!url) return false
+  const marker = `/object/public/${bucket}/`
+  const at = url.indexOf(marker)
+  if (at < 0) return false
+  const path = decodeURIComponent(url.slice(at + marker.length).split('?')[0])
+  if (!path) return false
+
+  try {
+    const { error } = await supabase.storage.from(bucket).remove([path])
+    if (!error) return true
+  } catch {
+    /* alta düş */
+  }
+
+  // kendi dosyamız değilse yönetici olarak silmeyi dene
+  try {
+    const { data, error } = await supabase.rpc('delete_media_admin', { p_path: path })
+    return !error && data === true
+  } catch {
+    return false
+  }
+}
+
 export async function uploadAvatar(userId: string, file: Blob) {
   const isImage = (file.type || '').startsWith('image/')
   const blob = isImage ? await squareImage(file, 512) : file

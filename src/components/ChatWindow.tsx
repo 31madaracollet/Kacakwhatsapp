@@ -5,7 +5,8 @@ import { useAuth } from '../hooks/useAuth'
 import { Avatar } from './Avatar'
 import { MessageBubble } from './MessageBubble'
 import { MessageInput } from './MessageInput'
-import { uploadMedia } from '../lib/supabase'
+import { deleteMediaByUrl, uploadMedia } from '../lib/supabase'
+import { humanSize, prepareFile, uploadErrorText } from '../lib/media'
 import type { Message } from '../lib/types'
 import { chatAvatar, chatTitle, groupByDay, lastSeenText, otherMember } from '../lib/utils'
 
@@ -102,34 +103,65 @@ export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast, onCall }: P
     }
   }
 
-  const sendFiles = async (files: File[], kind: 'image' | 'video' | 'file') => {
-    try {
-      for (const file of files) {
+  const sendFiles = async (files: File[], _kind: 'image' | 'video' | 'file') => {
+    let gonderilen = 0
+    for (const file of files) {
+      try {
         const isImage = file.type.startsWith('image/')
         const isVideo = file.type.startsWith('video/')
         const type: Message['type'] = isImage ? 'image' : isVideo ? 'video' : 'file'
-        const uploaded = await uploadMedia(file, `chat/${chatId}`, file.name)
-        await m.sendMessage({
-          chatId,
-          type,
-          media_url: uploaded.url,
-          media_name: file.name,
-          media_size: file.size,
-          body: null,
-          reply_to: replyTo?.id || null,
+
+        // video büyükse tarayıcıda küçült (Storage sınırı ~50 MB)
+        let lastPct = -10
+        const prepared = await prepareFile(file, (ratio) => {
+          const pct = Math.round(ratio * 100)
+          if (pct >= lastPct + 10) {
+            lastPct = pct
+            onToast(`Video küçültülüyor… %${pct} (${humanSize(file.size)})`)
+          }
         })
+
+        if (prepared !== file) onToast(`Yükleniyor… (${humanSize(prepared.size)})`)
+
+        let uploaded: { url: string; path: string; size: number; name: string }
+        try {
+          uploaded = await uploadMedia(prepared, `chat/${chatId}`, prepared.name)
+        } catch (e: any) {
+          throw new Error(uploadErrorText(e, prepared.size))
+        }
+
+        try {
+          await m.sendMessage({
+            chatId,
+            type,
+            media_url: uploaded.url,
+            media_name: prepared.name,
+            media_size: prepared.size,
+            body: null,
+            reply_to: replyTo?.id || null,
+          })
+        } catch (e) {
+          // mesaj yazılamadıysa dosya depoda kalmasın
+          await deleteMediaByUrl(uploaded.url)
+          throw e
+        }
+        gonderilen += 1
+      } catch (e: any) {
+        onToast(e?.message || 'Yükleme hatası')
+        if (gonderilen) setReplyTo(null)
+        return
       }
-      setReplyTo(null)
-      onToast('Medya gönderildi ✅')
-    } catch (e: any) {
-      onToast('Yükleme hatası: ' + (e.message || 'bilinmeyen hata'))
     }
+    setReplyTo(null)
+    if (gonderilen) onToast(gonderilen > 1 ? `${gonderilen} medya gönderildi ✅` : 'Medya gönderildi ✅')
   }
 
   const sendVoice = async (blob: Blob, duration: number) => {
+    const name = `ses-${Date.now()}.webm`
+    let url: string | null = null
     try {
-      const name = `ses-${Date.now()}.webm`
       const uploaded = await uploadMedia(blob, `chat/${chatId}`, name)
+      url = uploaded.url
       await m.sendMessage({
         chatId,
         type: 'audio',
@@ -140,7 +172,8 @@ export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast, onCall }: P
         body: null,
       })
     } catch (e: any) {
-      onToast('Ses gönderilemedi: ' + (e.message || 'hata'))
+      if (url) await deleteMediaByUrl(url)
+      onToast(uploadErrorText(e, blob.size))
     }
   }
 

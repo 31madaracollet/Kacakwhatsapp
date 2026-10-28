@@ -11,9 +11,10 @@ interface Props {
   s: Statuses
   meId: string
   onClose: () => void
+  onToast?: (msg: string) => void
 }
 
-export function StatusPanel({ s, meId, onClose }: Props) {
+export function StatusPanel({ s, meId, onClose, onToast }: Props) {
   const [viewing, setViewing] = useState<{ items: Status[]; index: number } | null>(null)
   const [composer, setComposer] = useState(false)
   const [text, setText] = useState('')
@@ -21,6 +22,7 @@ export function StatusPanel({ s, meId, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [kind, setKind] = useState<StatusKind>('text')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
 
   const startViewing = (items: Status[]) => {
     if (!items.length) return
@@ -30,14 +32,19 @@ export function StatusPanel({ s, meId, onClose }: Props) {
   const create = async () => {
     if (!text.trim() && !file) return
     setBusy(true)
+    setProgress('Paylaşılıyor…')
     try {
-      await s.createStatus(kind, text, file, bg)
+      await s.createStatus(kind, text, file, bg, setProgress)
       setComposer(false)
       setText('')
       setFile(null)
       setKind('text')
+      onToast?.('Durum paylaşıldı ✅')
+    } catch (e: any) {
+      onToast?.(e?.message || 'Durum paylaşılamadı')
     } finally {
       setBusy(false)
+      setProgress('')
     }
   }
 
@@ -181,7 +188,7 @@ export function StatusPanel({ s, meId, onClose }: Props) {
             </div>
 
             <button className="primary-btn" disabled={busy || (!text.trim() && !file)} onClick={create}>
-              {busy ? 'Paylaşılıyor…' : 'Durumu paylaş'}
+              {busy ? progress || 'Paylaşılıyor…' : 'Durumu paylaş'}
             </button>
           </div>
         )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase, uploadMedia } from '../lib/supabase'
+import { deleteMediaByUrl, supabase, uploadMedia } from '../lib/supabase'
+import { prepareFile, humanSize, uploadErrorText } from '../lib/media'
 import { mapStatus } from '../lib/map'
 import type { Status, StatusKind } from '../lib/types'
 import { useAuth } from './useAuth'
@@ -16,10 +17,11 @@ export function useStatuses() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      // süre süzgecini sunucuya bırakıyoruz: RLS "expires_at > now()" ile süzüyor.
+      // (cihaz saati ileri/geri olunca durumlar görünmez oluyordu)
       const { data, error } = await supabase
         .from('statuses')
         .select('*, profile:profiles(*)')
-        .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: true })
       if (error) throw error
       setStatuses(((data || []) as any[]).map(mapStatus))
@@ -31,6 +33,21 @@ export function useStatuses() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /* süresi dolmuş durumları (ve dosyalarını) temizle: depo şişmesin */
+  useEffect(() => {
+    if (!meId) return
+    void (async () => {
+      try {
+        await supabase.rpc('purge_expired_statuses')
+        await supabase.rpc('purge_orphan_media')
+        await load()
+      } catch {
+        /* yoksay */
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId])
 
   /* görüntüleme sayıları */
   const loadViews = useCallback(async () => {
@@ -63,17 +80,34 @@ export function useStatuses() {
   }, [meId, load, loadViews])
 
   const createStatus = useCallback(
-    async (kind: StatusKind, body: string, file?: File | null, bg?: string) => {
+    async (
+      kind: StatusKind,
+      body: string,
+      file?: File | null,
+      bg?: string,
+      onProgress?: (msg: string) => void,
+    ) => {
       if (!meId) throw new Error('Oturum bulunamadı')
       let media_url: string | null = null
       let media_meta: any = null
 
       if (file && (kind === 'image' || kind === 'video')) {
-        const up = await uploadMedia(file, `durum/${meId}`, file.name)
+        onProgress?.(kind === 'video' ? 'Video hazırlanıyor…' : 'Fotoğraf hazırlanıyor…')
+        const prepared = await prepareFile(file, (ratio) =>
+          onProgress?.(`Video küçültülüyor %${Math.round(ratio * 100)} (${humanSize(file.size)})`),
+        )
+        onProgress?.(`Yükleniyor… (${humanSize(prepared.size)})`)
+        let up: { url: string; path: string; size: number; name: string }
+        try {
+          up = await uploadMedia(prepared, `durum/${meId}`, prepared.name)
+        } catch (e: any) {
+          throw new Error(uploadErrorText(e, prepared.size))
+        }
         media_url = up.url
-        media_meta = { name: up.name, size: up.size, type: file.type }
+        media_meta = { name: up.name, size: up.size, type: prepared.type, path: up.path }
       }
 
+      onProgress?.('Paylaşılıyor…')
       const { error } = await supabase.from('statuses').insert({
         user_id: meId,
         kind,
@@ -82,7 +116,11 @@ export function useStatuses() {
         media_meta,
         bg: bg || '#0a7c5a',
       })
-      if (error) throw new Error(error.message)
+      if (error) {
+        // durum satırı yazılamadıysa yüklediğimiz dosyayı geri sil
+        if (media_url) await deleteMediaByUrl(media_url)
+        throw new Error(statusErrorText(error.message))
+      }
       await load()
     },
     [meId, load],
@@ -90,11 +128,14 @@ export function useStatuses() {
 
   const removeStatus = useCallback(
     async (id: string) => {
+      const target = statuses.find((s) => s.id === id)
       const { error } = await supabase.from('statuses').delete().eq('id', id)
       if (error) throw new Error(error.message)
+      // yer kaplamasın: medya dosyasını da depodan kaldır
+      if (target?.media_url) await deleteMediaByUrl(target.media_url)
       await load()
     },
-    [load],
+    [load, statuses],
   )
 
   const markViewed = useCallback(
@@ -146,3 +187,10 @@ export function useStatuses() {
 }
 
 export type Statuses = ReturnType<typeof useStatuses>
+
+
+function statusErrorText(msg: string) {
+  if (/row-level security|policy/i.test(msg)) return 'Durum paylaşma yetkin yok (oturumu yenile).'
+  if (/kind/i.test(msg)) return 'Durum türü desteklenmiyor.'
+  return 'Durum paylaşılamadı: ' + msg
+}

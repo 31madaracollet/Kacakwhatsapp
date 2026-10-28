@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CircleDot, MessageCircle, Phone, ShieldCheck, Users, Video, Wifi, Zap } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import { useMessenger } from './hooks/useMessenger'
@@ -15,7 +15,15 @@ import { ChatInfoModal } from './components/ChatInfoModal'
 import { StatusPanel } from './components/StatusPanel'
 import { CallOverlay } from './components/CallOverlay'
 import { AdminPanel } from './components/AdminPanel'
-import { otherMember } from './lib/utils'
+import { otherMember, chatTitle } from './lib/utils'
+import {
+  disableNotifications,
+  enableNotifications,
+  notificationsEnabled,
+  notificationsSupported,
+  registerNotificationWorker,
+  showNotification,
+} from './lib/notify'
 
 export default function App() {
   const { user, profile, loading } = useAuth()
@@ -32,6 +40,10 @@ export default function App() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [notifOn, setNotifOn] = useState(() => notificationsEnabled())
+  const notifAvailable = notificationsSupported()
+  const selectChatRef = useRef(m.selectChat)
+  selectChatRef.current = m.selectChat
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -39,9 +51,101 @@ export default function App() {
   }, [theme])
 
   const showToast = (msg: string) => {
+    if (!msg) return
     setToast(msg)
     window.setTimeout(() => setToast(null), 3200)
   }
+
+  /* bildirim servis çalışanı (mobilde bildirim için şart) */
+  useEffect(() => {
+    registerNotificationWorker()
+  }, [])
+
+  /* bildirime tıklanınca ilgili sohbeti aç */
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const onMsg = (e: MessageEvent) => {
+      const chatId = e.data?.chatId
+      if (e.data?.type === 'zap-notification-click' && chatId) selectChatRef.current(chatId)
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [])
+
+  const toggleNotif = async () => {
+    if (notifOn) {
+      disableNotifications()
+      setNotifOn(false)
+      showToast('Bildirimler kapatıldı 🔕')
+      return
+    }
+    const res = await enableNotifications()
+    if (res === 'unsupported') {
+      showToast('Bu tarayıcı bildirimleri desteklemiyor')
+      return
+    }
+    if (res === 'denied') {
+      showToast('Bildirim izni verilmedi — tarayıcı ayarlarından bu siteye izin ver')
+      return
+    }
+    setNotifOn(true)
+    registerNotificationWorker()
+    showToast('Bildirimler etkin 🔔')
+    void showNotification('ZapMesaj', 'Bildirimler açık. Yeni mesajlarda haber vereceğim.')
+  }
+
+  /* yeni gelen mesaj → bildirim */
+  const seenMsgs = useRef<Set<string>>(new Set())
+  const primed = useRef(false)
+  useEffect(() => {
+    const list = Object.values(m.messages).flat()
+    if (!primed.current) {
+      for (const x of list) seenMsgs.current.add(x.id)
+      primed.current = true
+      return
+    }
+    for (const msg of list) {
+      if (seenMsgs.current.has(msg.id)) continue
+      seenMsgs.current.add(msg.id)
+      if (!notifOn || !m.meId || msg.sender_id === m.meId) continue
+      if (msg.deleted_at) continue
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      const elsewhere = msg.chat_id !== m.activeChatId
+      if (!hidden && !elsewhere) continue
+
+      const chat = m.chats.find((c) => c.id === msg.chat_id)
+      const sender = chat?.members.find((x) => x.user_id === msg.sender_id)?.profile
+      const senderName = sender?.full_name || sender?.username || 'Birisi'
+      const where = chat ? chatTitle(chat, m.meId) : 'ZapMesaj'
+      const baslik = chat?.type === 'group' ? `${senderName} · ${where}` : senderName
+      const govde =
+        msg.type === 'image'
+          ? '📷 Fotoğraf'
+          : msg.type === 'video'
+            ? '🎬 Video'
+            : msg.type === 'audio'
+              ? '🎤 Sesli mesaj'
+              : msg.type === 'file'
+                ? `📎 ${msg.media_name || 'Dosya'}`
+                : msg.body || 'Yeni mesaj'
+
+      void showNotification(baslik, govde, {
+        chatId: msg.chat_id,
+        onClick: () => selectChatRef.current(msg.chat_id),
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.messages, m.chats, m.activeChatId, m.meId, notifOn])
+
+  /* gizli sekmede gelen arama bildirimi */
+  useEffect(() => {
+    if (!c.incoming) return
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') return
+    void showNotification(
+      `${c.incoming.fromName} arıyor…`,
+      c.incoming.kind === 'video' ? 'Görüntülü arama' : 'Sesli arama',
+    )
+  }, [c.incoming])
 
   const activeChat = m.chats.find((x) => x.id === m.activeChatId) || null
 
@@ -112,6 +216,9 @@ export default function App() {
         onStatus={() => setStatusOpen(true)}
         onAdmin={() => setAdminOpen(true)}
         statusCount={s.groups.filter((g) => !g.isMine).length}
+        notifOn={notifOn}
+        notifAvailable={notifAvailable}
+        onToggleNotif={toggleNotif}
       />
 
       {m.activeChatId ? (
@@ -191,7 +298,9 @@ export default function App() {
           startCall(kind)
         }}
       />
-      {statusOpen && m.meId && <StatusPanel s={s} meId={m.meId} onClose={() => setStatusOpen(false)} />}
+      {statusOpen && m.meId && (
+        <StatusPanel s={s} meId={m.meId} onClose={() => setStatusOpen(false)} onToast={showToast} />
+      )}
       <AdminPanel a={a} open={adminOpen} onClose={() => setAdminOpen(false)} onToast={showToast} />
       <CallOverlay c={c} />
 
