@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, Volume2 } from 'lucide-react'
 import type { Calls } from '../hooks/useCalls'
 import { Avatar } from './Avatar'
@@ -20,13 +20,41 @@ function Stream({ stream, muted }: { stream: MediaStream | null; muted?: boolean
 }
 
 export function CallOverlay({ c }: Props) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [blocked, setBlocked] = useState(false)
   const { call, state, incoming } = c
+
+  /* sesli aramada sesin çalması: uzak ses akışını <audio>ya bağla */
+  useEffect(() => {
+    const el = audioRef.current
+    if (!el) return
+    if (el.srcObject !== c.remoteStream) el.srcObject = c.remoteStream
+    el.muted = false
+    el.volume = 1
+    if (c.remoteStream) {
+      el.play()
+        .then(() => setBlocked(false))
+        .catch(() => {
+          /* tarayıcı otomatik oynatmayı engelledi → kullanıcı dokunuşu beklenir */
+          setBlocked(true)
+        })
+    }
+  }, [c.remoteStream])
+
+  const resumeAudio = () => {
+    const el = audioRef.current
+    if (!el || !c.remoteStream) return
+    el.play()
+      .then(() => setBlocked(false))
+      .catch(() => setBlocked(true))
+  }
+
   if (!call && !incoming) return null
 
   /* --------------------------------------------------------- gelen çağrı */
   if (incoming && !call) {
     return (
-      <div className="call-overlay">
+      <div className="call-overlay" onClick={resumeAudio}>
         <div className="call-card">
           <Avatar name={incoming.fromName} src={incoming.fromAvatar} size={96} seed={incoming.from} />
           <h2>{incoming.fromName}</h2>
@@ -56,7 +84,10 @@ export function CallOverlay({ c }: Props) {
   const videoMode = call.kind === 'video'
 
   return (
-    <div className={`call-overlay ${videoMode ? 'video-mode' : ''}`}>
+    <div className={`call-overlay ${videoMode ? 'video-mode' : ''}`} onClick={resumeAudio}>
+      {/* sesli aramada ses buradan gelir */}
+      <audio ref={audioRef} autoPlay playsInline className="call-audio" />
+
       <div className="call-card">
         {videoMode && state === 'active' ? (
           <div className="call-stage">
@@ -77,7 +108,13 @@ export function CallOverlay({ c }: Props) {
 
         {c.error && <p className="call-error">{c.error}</p>}
 
-        <div className="call-actions">
+        {blocked && !videoMode && (
+          <button className="call-unlock" onClick={resumeAudio}>
+            <Volume2 size={16} /> Sesi aç (tarayıcı sesi engelledi)
+          </button>
+        )}
+
+        <div className="call-actions" onClick={(e) => e.stopPropagation()}>
           <button className={`call-btn ghost ${c.muted ? 'off' : ''}`} onClick={c.toggleMute} title="Sesi kapat">
             {c.muted ? <MicOff size={22} /> : <Mic size={22} />}
           </button>
@@ -92,6 +129,9 @@ export function CallOverlay({ c }: Props) {
         </div>
 
         {videoMode && state === 'active' && <span className="call-mini-label">{durum}</span>}
+        {!videoMode && state === 'active' && (
+          <span className="call-mini-label">Sesli arama · mikrofon açık</span>
+        )}
       </div>
     </div>
   )

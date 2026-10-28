@@ -17,6 +17,14 @@ export interface NewMessageInput {
   reply_to?: string | null
 }
 
+function translateSendError(msg: string) {
+  const m = msg.toLowerCase()
+  if (m.includes('row-level security')) return 'Bu sohbete mesaj gönderme yetkin yok'
+  if (m.includes('yasaklandı')) return 'Hesabın yasaklandı, mesaj gönderemezsin'
+  if (m.includes('foreign key')) return 'Sohbet bulunamadı'
+  return msg
+}
+
 function beep() {
   try {
     const Ctx = window.AudioContext || (window as any).webkitAudioContext
@@ -377,16 +385,33 @@ export function useMessenger() {
             }
           : null
 
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: input.chatId,
-        sender_id: meId,
-        content: input.body?.trim() || null,
-        type: input.type || 'text',
-        media_url: input.media_url || null,
-        media_meta,
-        reply_to: input.reply_to || null,
-      })
-      if (error) throw new Error(error.message)
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: input.chatId,
+          sender_id: meId,
+          content: input.body?.trim() || null,
+          type: input.type || 'text',
+          media_url: input.media_url || null,
+          media_meta,
+          reply_to: input.reply_to || null,
+        })
+        .select('*')
+        .single()
+      if (error) throw new Error(translateSendError(error.message))
+
+      // gönderilen mesajı anında göster (realtime gecikse bile)
+      if (data) {
+        const saved = mapMessage(data)
+        setMessages((prev) => {
+          const list = prev[saved.chat_id] || []
+          if (list.some((m) => m.id === saved.id)) return prev
+          return { ...prev, [saved.chat_id]: [...list, saved] }
+        })
+        setChats((prev) =>
+          prev.map((c) => (c.id === saved.chat_id ? { ...c, last_message_at: saved.created_at } : c)),
+        )
+      }
       void markRead(input.chatId)
     },
     [meId, markRead],
@@ -449,12 +474,21 @@ export function useMessenger() {
       const { data, error } = await supabase.rpc('create_group', {
         gname: name,
         member_ids: memberIds,
-        gdesc: avatar ? `avatar:${avatar}` : null,
+        gdesc: null,
       })
       if (error) throw new Error(error.message)
+      const chatId = data as string
+      // grup fotoğrafı ayrı kolonda tutulur
+      if (avatar) {
+        const { error: aErr } = await supabase
+          .from('conversations')
+          .update({ avatar_url: avatar })
+          .eq('id', chatId)
+        if (aErr) throw new Error(aErr.message)
+      }
       await loadAll()
-      setActiveChatId(data as string)
-      return data as string
+      setActiveChatId(chatId)
+      return chatId
     },
     [loadAll],
   )

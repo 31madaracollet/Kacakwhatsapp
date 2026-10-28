@@ -93,9 +93,13 @@ export function ChatWindow({ m, chatId, onBack, onOpenInfo, onToast, onCall }: P
           : lastSeenText(other?.profile?.last_seen)
 
   const sendText = async (text: string) => {
-    await m.sendMessage({ chatId, body: text, reply_to: replyTo?.id || null })
-    setReplyTo(null)
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }))
+    try {
+      await m.sendMessage({ chatId, body: text, reply_to: replyTo?.id || null })
+      setReplyTo(null)
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }))
+    } catch (e: any) {
+      onToast('Mesaj gönderilemedi: ' + (e.message || 'bilinmeyen hata'))
+    }
   }
 
   const sendFiles = async (files: File[], kind: 'image' | 'video' | 'file') => {

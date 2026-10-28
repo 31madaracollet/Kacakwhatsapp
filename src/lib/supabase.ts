@@ -48,11 +48,55 @@ export async function uploadMedia(
   return { url: publicUrl(bucket, path), path, size: file.size, name: name || `dosya.${ext}` }
 }
 
+/** Fotoğrafı ortadan kare kırpar, 512 px'e küçültür (profil fotoğrafı bozulmasın). */
+export async function squareImage(file: File | Blob, size = 512): Promise<Blob> {
+  try {
+    const bitmap = 'createImageBitmap' in window ? await createImageBitmap(file) : await loadImage(file)
+    const w = 'width' in bitmap ? bitmap.width : 0
+    const h = 'height' in bitmap ? bitmap.height : 0
+    if (!w || !h) throw new Error('görsel okunamadı')
+    const side = Math.min(w, h)
+    const sx = (w - side) / 2
+    const sy = (h - side) / 2
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas yok')
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bitmap as CanvasImageSource, sx, sy, side, side, 0, 0, size, size)
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.9))
+    if (!blob) throw new Error('dönüştürme başarısız')
+    return blob
+  } catch {
+    return file // olmazsa ham dosya yüklenir
+  }
+}
+
+function loadImage(file: Blob): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      res(img)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      rej(new Error('görsel yüklenemedi'))
+    }
+    img.src = url
+  })
+}
+
 export async function uploadAvatar(userId: string, file: Blob) {
-  const ext = extOf(file instanceof File ? file.name : 'jpg', 'jpg')
+  const isImage = (file.type || '').startsWith('image/')
+  const blob = isImage ? await squareImage(file, 512) : file
+  const name = file instanceof File ? file.name : 'avatar.jpg'
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : extOf(name, 'jpg')
   const path = `${userId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
-    contentType: file.type || 'image/jpeg',
+  const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, blob, {
+    contentType: blob.type || 'image/jpeg',
     cacheControl: '31536000',
     upsert: true,
   })

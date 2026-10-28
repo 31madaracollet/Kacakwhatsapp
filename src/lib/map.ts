@@ -30,12 +30,17 @@ export function mapMember(m: any): Member {
 }
 
 export function mapChat(c: any, members: Member[] = []): Chat {
+  // eski sürüm grup fotoğrafını description içine "avatar:<url>" olarak yazıyordu
+  const legacyAvatar =
+    typeof c.description === 'string' && c.description.startsWith('avatar:')
+      ? c.description.slice('avatar:'.length)
+      : null
   return {
     id: c.id,
     type: c.type,
     name: c.name ?? null,
-    avatar_url: c.avatar_url ?? null,
-    description: c.description ?? null,
+    avatar_url: c.avatar_url ?? legacyAvatar,
+    description: legacyAvatar ? null : (c.description ?? null),
     created_by: c.created_by ?? null,
     created_at: c.created_at,
     members,
