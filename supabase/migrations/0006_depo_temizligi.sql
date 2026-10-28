@@ -1,72 +1,48 @@
--- Depo temizliği: silinen mesaj/durum dosyaları Storage'dan da kalksın.
+-- Depo temizliği.
+-- Not: Supabase, storage.objects tablosundan doğrudan silmeye izin vermiyor
+-- (protect_delete trigger). Bu yüzden fonksiyonlar yalnızca SİLİNECEK DOSYA
+-- YOLLARINI döndürür; gerçek silme istemcide Storage API ile yapılır.
 
--- Yönetici, başkasının yüklediği dosyayı silebilsin (Storage RLS'i sahibi olmayanı engelliyor).
-create or replace function public.delete_media_admin(p_path text)
-returns boolean
-language plpgsql
-security definer
-set search_path = public, storage
-as $$
-begin
-  if not public.is_app_admin() then
-    return false;
-  end if;
-  if p_path is null or p_path = '' then
-    return false;
-  end if;
-  delete from storage.objects where bucket_id = 'media' and name = p_path;
-  return true;
-end $$;
-
-grant execute on function public.delete_media_admin(text) to authenticated;
-
--- Süresi dolmuş durumları ve dosyalarını temizle (24 saat + 2 saat tolerans).
+-- Süresi dolmuş durumları siler, dosya yollarını döndürür.
 create or replace function public.purge_expired_statuses()
-returns integer
+returns text[]
 language plpgsql
 security definer
 set search_path = public, storage
 as $$
 declare
-  rec record;
-  silinen integer := 0;
+  yollar text[] := '{}';
 begin
-  for rec in
-    select id, media_url
-      from public.statuses
-     where expires_at < now() - interval '2 hours'
-  loop
-    if rec.media_url is not null then
-      delete from storage.objects
-       where bucket_id = 'media'
-         and name = substring(rec.media_url from '/object/public/media/(.*)$');
-    end if;
-  end loop;
+  select coalesce(array_agg(substring(media_url from '/object/public/media/(.*)$')), '{}')
+    into yollar
+    from public.statuses
+   where expires_at < now() - interval '2 hours'
+     and media_url is not null;
 
   delete from public.statuses where expires_at < now() - interval '2 hours';
-  get diagnostics silinen = row_count;
-  return silinen;
+  return yollar;
 end $$;
 
 grant execute on function public.purge_expired_statuses() to authenticated;
 
--- Hiçbir mesaja/duruma bağlı olmayan (artık) dosyaları temizle: depo şişmesin.
+-- Hiçbir mesaja/duruma bağlı olmayan (artık) dosyaların yollarını döndürür.
 create or replace function public.purge_orphan_media()
-returns integer
+returns text[]
 language plpgsql
 security definer
 set search_path = public, storage
 as $$
 declare
-  silinen integer := 0;
+  yollar text[] := '{}';
 begin
-  delete from storage.objects o
+  select coalesce(array_agg(o.name), '{}')
+    into yollar
+    from storage.objects o
    where o.bucket_id = 'media'
      and o.created_at < now() - interval '1 day'
      and not exists (select 1 from public.messages m where m.media_url like '%' || o.name)
      and not exists (select 1 from public.statuses s where s.media_url like '%' || o.name);
-  get diagnostics silinen = row_count;
-  return silinen;
+  return yollar;
 end $$;
 
 grant execute on function public.purge_orphan_media() to authenticated;
