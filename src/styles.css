@@ -1824,3 +1824,49 @@ html[data-theme='dark'] .composer { background: #111b21; }
 .notif-banner:hover {
   filter: brightness(0.98);
 }
+
+/* ===================================================== GİRİŞ / KAYIT SEKMELERİ */
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--panel-2, #f1f5f4);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+}
+.auth-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-soft, #5b6b67);
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 9px 6px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.auth-tabs button.active {
+  background: #fff;
+  color: var(--accent, #0a7c5a);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+[data-theme='dark'] .auth-tabs button.active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.field { position: relative; }
+.field-eye {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--text-soft, #6b7a76);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-family: inherit;
+}
